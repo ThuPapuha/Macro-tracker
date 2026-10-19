@@ -1,0 +1,6 @@
+# Used by the Supabase CLI when GitHub Actions deploys the Edge Function.
+project_id = "macro-tracker"
+
+[functions.gemini]
+# The function validates the user's session itself (see index.ts).
+verify_jwt = false
