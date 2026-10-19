@@ -22,6 +22,9 @@ trap 'rm -f "$RESPONSE" "$RESPONSE.json"' EXIT
 
 : "${SUPABASE_ACCESS_TOKEN:?Falta SUPABASE_ACCESS_TOKEN}"
 
+# Access tokens can be limited to the organizations that existed when they were created.
+TOKEN_HINT="Si tu token de Supabase no ve tu organización, crea uno nuevo en https://supabase.com/dashboard/account/tokens con acceso a todas tus organizaciones, reemplaza el secreto SUPABASE_ACCESS_TOKEN en GitHub y vuelve a correr el workflow. También puedes crear el proyecto \"$NAME\" a mano en https://supabase.com/dashboard/new."
+
 # call METHOD PATH [curl args...] -> prints the body; fails on HTTP errors.
 call() {
   local method=$1 path=$2 code
@@ -41,7 +44,11 @@ find_ref() {
     echo "$SUPABASE_PROJECT_REF"
     return
   fi
-  call GET /projects | jq -r --arg name "$NAME" '[.[] | select(.name == $name)][0] | (.ref // .id) // empty'
+  # Match the name case-insensitively; if the account has a single project, use that one.
+  call GET /projects | jq -r --arg name "$NAME" '
+    ([.[] | select((.name | ascii_downcase) == ($name | ascii_downcase))][0]
+      // (if length == 1 then .[0] else null end))
+    | if . == null then empty else (.ref // .id) end'
 }
 
 create_project() {
@@ -53,7 +60,7 @@ create_project() {
     jq -n '{name: "Macro Tracker"}' > "$RESPONSE.json"
     org=$(call POST /organizations --data @"$RESPONSE.json" | jq -r '(.slug // .id) // empty') || org=""
     if [ -z "$org" ]; then
-      echo "::error::No se pudo crear una organización. Crea una en https://supabase.com/dashboard/new y vuelve a correr el workflow." >&2
+      echo "::error::$TOKEN_HINT" >&2
       return 1
     fi
   fi
@@ -65,7 +72,10 @@ create_project() {
   # The database password is never needed: everything goes through the Management API.
   jq -n --arg name "$NAME" --arg org "$org" --arg pass "$(openssl rand -hex 24)" --argjson region "$region" \
     '{name: $name, organization_slug: $org, db_pass: $pass, region_selection: $region}' > "$RESPONSE.json"
-  call POST /projects --data @"$RESPONSE.json" | jq -r '.ref // .id'
+  if ! call POST /projects --data @"$RESPONSE.json" | jq -r '.ref // .id'; then
+    echo "::error::No se pudo crear el proyecto. $TOKEN_HINT" >&2
+    return 1
+  fi
 }
 
 wait_until_ready() {
