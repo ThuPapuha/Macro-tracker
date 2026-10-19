@@ -156,7 +156,7 @@ class AddFoodViewModel(
             try {
                 val estimate = ai.estimateMeal(description, image)
                 results.clear()
-                results.addAll(estimate.items.map(FoodDraft::from))
+                results.addAll(estimate.items.map { FoodDraft.from(it) })
                 notes = estimate.notes
             } catch (e: CancellationException) {
                 throw e
