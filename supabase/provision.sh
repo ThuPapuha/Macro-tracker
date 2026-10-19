@@ -215,15 +215,23 @@ smoke_test() {
       }
     }
   }' > "$RESPONSE.json"
-  code=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X POST "$url/functions/v1/gemini" \
-    -H "apikey: $key" -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
-    --data @"$RESPONSE.json")
-  local answer
-  answer=$(jq -r '[.candidates[0].content.parts[]? | select(.thought != true) | .text // empty] | join("")' "$RESPONSE" 2> /dev/null || true)
-  if [ "$code" != 200 ] || ! jq -e '.calories > 0' <<< "$answer" > /dev/null 2>&1; then
-    echo "::error::La IA respondió HTTP $code: $(head -c 400 "$RESPONSE")"
-    return 1
-  fi
+  local answer attempt
+  for attempt in 1 2 3; do
+    code=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X POST "$url/functions/v1/gemini" \
+      -H "apikey: $key" -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+      --data @"$RESPONSE.json")
+    answer=$(jq -r '[.candidates[0].content.parts[]? | select(.thought != true) | .text // empty] | join("")' "$RESPONSE" 2> /dev/null || true)
+    if [ "$code" = 200 ] && jq -e '.calories > 0' <<< "$answer" > /dev/null 2>&1; then
+      break
+    fi
+    # Overloaded models (5xx) usually recover quickly; anything else will not.
+    if [ "$attempt" = 3 ] || [ "$code" -lt 500 ]; then
+      echo "::error::La IA respondió HTTP $code: $(head -c 400 "$RESPONSE")"
+      return 1
+    fi
+    echo "Gemini respondió HTTP $code, reintentando en 20 s…"
+    sleep "${SUPABASE_POLL_SECONDS:-20}"
+  done
   echo "Gemini (${GEMINI_MODEL:-gemini-3.6-flash}): ok -> $answer"
 }
 

@@ -17,6 +17,24 @@ function error(status: number, message: string): Response {
   });
 }
 
+// Gemini answers 500/503 when a model is overloaded; those usually clear within seconds.
+const RETRYABLE = new Set([500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [1500, 4000, 8000];
+
+async function callGemini(body: string): Promise<Response> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+      body,
+    });
+    if (!RETRYABLE.has(response.status) || attempt >= RETRY_DELAYS_MS.length) return response;
+    await response.body?.cancel();
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return error(405, "Método no permitido");
   if (!GEMINI_API_KEY) return error(500, "Falta el secreto GEMINI_API_KEY en Supabase");
@@ -41,14 +59,7 @@ Deno.serve(async (req: Request) => {
   const body = await req.text();
   if (body.length > MAX_BODY_BYTES) return error(413, "La solicitud es demasiado grande");
 
-  const gemini = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
-      body,
-    },
-  );
+  const gemini = await callGemini(body);
   return new Response(await gemini.text(), {
     status: gemini.status,
     headers: { "Content-Type": "application/json" },
