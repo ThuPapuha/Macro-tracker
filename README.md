@@ -25,34 +25,37 @@ App Android ──► Supabase (base de datos de grupos + función "gemini") ─
         GitHub Actions despliega todo con los secretos del environment "production"
 ```
 
-## Puesta en marcha (una sola vez, unos 10 minutos)
+## Puesta en marcha (una sola vez, unos 5 minutos)
 
-### 1. Crea un proyecto gratuito en Supabase
+### 1. Crea una cuenta en Supabase y un token
 
-1. Entra a <https://supabase.com>, crea una cuenta y un proyecto nuevo (el plan Free alcanza).
-2. Copia el **Project ref**: es el código de la URL del proyecto, `https://supabase.com/dashboard/project/<ESTE-CODIGO>`.
-3. Crea un **Access token** en <https://supabase.com/dashboard/account/tokens>.
+1. Entra a <https://supabase.com> y crea una cuenta gratis (puedes entrar con GitHub). No hace falta crear ningún proyecto: el workflow lo crea solo.
+2. Crea un **Access token** en <https://supabase.com/dashboard/account/tokens> y cópialo.
 
 ### 2. Agrega los secretos en GitHub
 
-En este repositorio ve a **Settings → Environments → New environment**, llámalo **`production`** y agrega estos *Environment secrets*:
+En este repositorio ve a **Settings → Environments → `production`** (créalo si no existe) y agrega estos *Environment secrets*:
 
 | Nombre | Valor |
 | --- | --- |
 | `GEMINI_API_KEY` | Tu clave de Gemini (<https://aistudio.google.com/apikey>) |
-| `SUPABASE_ACCESS_TOKEN` | El access token del paso 1.3 |
-| `SUPABASE_PROJECT_REF` | El project ref del paso 1.2 |
+| `SUPABASE_ACCESS_TOKEN` | El access token del paso 1.2 |
 
-Opcional, como *Environment variables*: `GEMINI_MODEL` (por defecto `gemini-3.6-flash`) y `AI_DAILY_LIMIT` (por defecto `150`).
+Opcional, como *Environment variables*:
+- `GEMINI_MODEL`: por defecto `gemini-3.6-flash`.
+- `AI_DAILY_LIMIT`: por defecto `150`.
+- `SUPABASE_REGION`: por ejemplo `sa-east-1` para Sudamérica. Por defecto se usa una región de América.
+- `SUPABASE_PROJECT_REF`: solo si quieres usar un proyecto que ya tengas, en vez de que se cree uno llamado `macro-tracker`.
 
 ### 3. Genera la app
 
-Ve a **Actions → Build & deploy → Run workflow**. El workflow:
+Con el código ya en `main`, ve a **Actions → Build & deploy → Run workflow** (o simplemente haz push a `main`). El workflow (`supabase/provision.sh`):
 
-1. aplica `supabase/schema.sql` (tablas y funciones con seguridad por usuario),
-2. activa el inicio de sesión anónimo,
-3. guarda tu clave de Gemini como secreto y despliega la función `gemini`,
-4. compila el APK, corre las pruebas y lo publica en **Releases**.
+1. crea el proyecto `macro-tracker` en tu cuenta de Supabase si no existe, o lo reactiva si estaba pausado,
+2. aplica `supabase/schema.sql` (tablas y funciones con seguridad por usuario),
+3. activa el inicio de sesión anónimo,
+4. guarda tu clave de Gemini como secreto y despliega la función `gemini`,
+5. compila el APK, corre las pruebas y lo publica en **Releases**.
 
 Cada push a `main` repite el proceso y publica una versión nueva.
 
@@ -70,6 +73,7 @@ Las versiones nuevas se instalan encima de la anterior sin perder datos, porque 
 - **Llave de firma privada (opcional)**: la llave del repo es pública. Si prefieres una propia, agrega los secretos `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`. Cambiar de llave obliga a desinstalar la versión anterior una vez.
 - **Identidad**: cada instalación es un usuario anónimo. Si desinstalas la app, vuelve a unirte a tus grupos con el código.
 - Si el login anónimo no se activó solo, actívalo en Supabase: *Authentication → Sign In / Providers → Allow anonymous sign-ins*.
+- Los proyectos gratis de Supabase se pausan tras una semana sin uso. Con el uso diario no pasa; si ocurre, vuelve a correr el workflow y lo reactiva.
 
 ## Desarrollo
 

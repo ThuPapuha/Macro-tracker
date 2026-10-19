@@ -24,6 +24,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF || vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_REGION: ${{ vars.SUPABASE_REGION }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.6-flash' }}
       AI_DAILY_LIMIT: ${{ vars.AI_DAILY_LIMIT || '150' }}
     steps:
@@ -33,7 +34,7 @@ jobs:
         id: config
         run: |
           missing=""
-          for name in GEMINI_API_KEY SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF; do
+          for name in GEMINI_API_KEY SUPABASE_ACCESS_TOKEN; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           if [ -n "$missing" ]; then
@@ -43,35 +44,9 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Apply database schema
+      - name: Create or update Supabase project
         if: steps.config.outputs.ready == 'true'
-        run: |
-          jq -Rs '{query: .}' supabase/schema.sql > "$RUNNER_TEMP/schema.json"
-          status=$(curl -sS -o "$RUNNER_TEMP/result.json" -w '%{http_code}' -X POST \
-            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
-            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data @"$RUNNER_TEMP/schema.json")
-          if [ "$status" -ge 300 ] || jq -e 'type == "object" and has("message")' "$RUNNER_TEMP/result.json" > /dev/null; then
-            cat "$RUNNER_TEMP/result.json"
-            echo "::error title=Esquema SQL::No se pudo aplicar supabase/schema.sql (HTTP $status)"
-            exit 1
-          fi
-          echo "Esquema aplicado."
-
-      - name: Enable anonymous sign-ins
-        if: steps.config.outputs.ready == 'true'
-        run: |
-          status=$(curl -sS -o "$RUNNER_TEMP/auth.json" -w '%{http_code}' -X PATCH \
-            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/config/auth" \
-            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data '{"external_anonymous_users_enabled": true}')
-          if [ "$status" -ge 300 ]; then
-            echo "::warning title=Login anónimo::No se pudo activar automáticamente (HTTP $status). Actívalo en Supabase: Authentication → Sign In / Providers → Allow anonymous sign-ins."
-          else
-            echo "Login anónimo activado."
-          fi
+        run: bash supabase/provision.sh setup
 
       - uses: supabase/setup-cli@v1
         if: steps.config.outputs.ready == 'true'
@@ -114,21 +89,12 @@ jobs:
 
       - name: Resolve Supabase settings
         run: |
-          if [ -z "$SUPABASE_PROJECT_REF" ]; then
-            echo "::warning title=Sin servidor::Falta SUPABASE_PROJECT_REF: el APK funcionará sin grupos ni IA del servidor."
-            exit 0
-          fi
-          echo "SUPABASE_URL=https://$SUPABASE_PROJECT_REF.supabase.co" >> "$GITHUB_ENV"
-          if [ -z "$SUPABASE_ANON_KEY" ] && [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
-            # Client-side key (publishable, or the legacy anon key). It is meant to be public.
-            key=$(curl -fsS "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys?reveal=false" \
-                -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-              | jq -r '([.[] | select(.type == "publishable")][0].api_key) // ([.[] | select(.name == "anon")][0].api_key) // empty')
-            if [ -n "$key" ]; then
-              echo "SUPABASE_ANON_KEY=$key" >> "$GITHUB_ENV"
-            else
-              echo "::warning::No se encontró la clave pública de Supabase; define SUPABASE_ANON_KEY."
-            fi
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
+            bash supabase/provision.sh app-env
+          elif [ -n "$SUPABASE_PROJECT_REF" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            echo "SUPABASE_URL=https://$SUPABASE_PROJECT_REF.supabase.co" >> "$GITHUB_ENV"
+          else
+            echo "::warning title=Sin servidor::Falta SUPABASE_ACCESS_TOKEN: el APK funcionará sin grupos ni IA del servidor."
           fi
 
       - name: Use private keystore (optional)
