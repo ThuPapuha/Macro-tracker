@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -10,7 +12,7 @@ plugins {
 fun setting(name: String, default: String = ""): String {
     val localFile = rootProject.file("local.properties")
     val local = if (localFile.exists()) {
-        java.util.Properties().apply { localFile.inputStream().use { load(it) } }.getProperty(name)
+        Properties().apply { localFile.inputStream().use { load(it) } }.getProperty(name)
     } else {
         null
     }
