@@ -48,8 +48,14 @@ create_project() {
   local org region
   org="${SUPABASE_ORG:-$(call GET /organizations | jq -r '.[0] | (.slug // .id) // empty')}"
   if [ -z "$org" ]; then
-    echo "::error::Tu cuenta de Supabase no tiene ninguna organización." >&2
-    return 1
+    # New accounts have no organization until one is created in the dashboard.
+    echo "Creando una organización en Supabase…" >&2
+    jq -n '{name: "Macro Tracker"}' > "$RESPONSE.json"
+    org=$(call POST /organizations --data @"$RESPONSE.json" | jq -r '(.slug // .id) // empty') || org=""
+    if [ -z "$org" ]; then
+      echo "::error::No se pudo crear una organización. Crea una en https://supabase.com/dashboard/new y vuelve a correr el workflow." >&2
+      return 1
+    fi
   fi
   if [ -n "${SUPABASE_REGION:-}" ]; then
     region=$(jq -n --arg code "$SUPABASE_REGION" '{type: "specific", code: $code}')
