@@ -5,6 +5,8 @@
 #   supabase/provision.sh setup    find or create the project, wait until it is up,
 #                                  apply schema.sql and enable anonymous sign-ins
 #   supabase/provision.sh app-env  write SUPABASE_URL / SUPABASE_ANON_KEY for the APK build
+#   supabase/provision.sh smoke-test  sign in as a throwaway user, call the API and the Gemini
+#                                     function like the app does, then delete that user
 #
 # Environment: SUPABASE_ACCESS_TOKEN (required), SUPABASE_PROJECT_REF (optional, otherwise the
 # project is found by name), SUPABASE_PROJECT_NAME (default "macro-tracker"), SUPABASE_REGION
@@ -162,11 +164,75 @@ app_env() {
   echo "APK conectado al proyecto $ref."
 }
 
+cleanup_smoke_user() {
+  # The id comes from Supabase, but only ever splice a well-formed UUID into SQL.
+  [[ "$SMOKE_UID" =~ ^[0-9a-f-]{36}$ ]] || return 0
+  jq -n --arg q "delete from auth.users where id = '$SMOKE_UID'" '{query: $q}' > "$RESPONSE.json"
+  call POST "/projects/$SMOKE_REF/database/query" --data @"$RESPONSE.json" > /dev/null || true
+  rm -f "$RESPONSE" "$RESPONSE.json"
+}
+
+smoke_test() {
+  local ref url key session token uid code
+  ref=$(find_ref)
+  url="${SUPABASE_PROJECT_URL:-https://$ref.supabase.co}"
+  key=$(call GET "/projects/$ref/api-keys?reveal=false" |
+    jq -r '([.[] | select(.type == "publishable")][0].api_key) // ([.[] | select(.name == "anon")][0].api_key) // empty')
+
+  session=$(curl -sS -X POST "$url/auth/v1/signup" -H "apikey: $key" -H "Content-Type: application/json" -d '{"data": {}}')
+  token=$(jq -r '.access_token // empty' <<< "$session")
+  uid=$(jq -r '.user.id // empty' <<< "$session")
+  if [ -z "$token" ]; then
+    echo "::error::Login anónimo falló: $(head -c 300 <<< "$session")"
+    return 1
+  fi
+  # Remove the throwaway user (and its rows) whatever happens next.
+  SMOKE_REF=$ref SMOKE_UID=$uid
+  trap cleanup_smoke_user EXIT
+  echo "Login anónimo: ok"
+
+  code=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X POST "$url/rest/v1/rpc/my_groups" \
+    -H "apikey: $key" -H "Authorization: Bearer $token" -H "Content-Type: application/json" -d '{}')
+  if [ "$code" != 200 ] || [ "$(cat "$RESPONSE")" != "[]" ]; then
+    echo "::error::La función my_groups respondió HTTP $code: $(head -c 300 "$RESPONSE")"
+    return 1
+  fi
+  echo "Base de datos: ok"
+
+  # Same request shape the app sends: JSON output constrained by a responseSchema.
+  jq -n '{
+    contents: [{role: "user", parts: [{text: "Comida a estimar: 1 manzana mediana"}]}],
+    systemInstruction: {parts: [{text: "Estima calorías y macros de la comida. Responde en español."}]},
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          name: {type: "STRING"}, calories: {type: "NUMBER"},
+          protein: {type: "NUMBER"}, carbs: {type: "NUMBER"}, fat: {type: "NUMBER"}
+        },
+        required: ["name", "calories", "protein", "carbs", "fat"]
+      }
+    }
+  }' > "$RESPONSE.json"
+  code=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X POST "$url/functions/v1/gemini" \
+    -H "apikey: $key" -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+    --data @"$RESPONSE.json")
+  local answer
+  answer=$(jq -r '[.candidates[0].content.parts[]? | select(.thought != true) | .text // empty] | join("")' "$RESPONSE" 2> /dev/null || true)
+  if [ "$code" != 200 ] || ! jq -e '.calories > 0' <<< "$answer" > /dev/null 2>&1; then
+    echo "::error::La IA respondió HTTP $code: $(head -c 400 "$RESPONSE")"
+    return 1
+  fi
+  echo "Gemini (${GEMINI_MODEL:-gemini-3.6-flash}): ok -> $answer"
+}
+
 case "${1:-}" in
   setup) setup ;;
   app-env) app_env ;;
+  smoke-test) smoke_test ;;
   *)
-    echo "Uso: $0 setup|app-env" >&2
+    echo "Uso: $0 setup|app-env|smoke-test" >&2
     exit 2
     ;;
 esac
