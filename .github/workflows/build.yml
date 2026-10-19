@@ -65,6 +65,12 @@ jobs:
         if: steps.config.outputs.ready == 'true'
         run: supabase functions deploy gemini --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
 
+      - name: Smoke test (login, database, Gemini)
+        if: steps.config.outputs.ready == 'true'
+        # Report problems (e.g. an invalid Gemini key) without blocking the APK release.
+        continue-on-error: true
+        run: bash supabase/provision.sh smoke-test
+
   android:
     name: Build APK
     needs: backend
