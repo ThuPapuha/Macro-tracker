@@ -1,6 +1,6 @@
 # Macro Tracker
 
-App Android para registrar los macros de tus comidas día a día, con grupos para seguir el progreso junto a tus amigos y objetivos automáticos a partir de un documento (plan de tu nutricionista, InBody, análisis, etc.). La IA usa **Gemini 3.6 Flash** (`gemini-3.6-flash`).
+App Android para registrar los macros de tus comidas día a día, con grupos para seguir el progreso junto a tus amigos y objetivos automáticos a partir de un documento (plan de tu nutricionista, InBody, análisis, etc.). La IA usa **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`), cuyo plan gratis permite muchas más consultas diarias que Gemini Flash.
 
 ## Qué hace
 
@@ -20,7 +20,7 @@ Tus comidas se guardan en el teléfono. Con los grupos solo se comparten los tot
 El repositorio es público y cualquiera puede descargar el APK, así que la clave **no se mete dentro de la app**. GitHub Actions toma `GEMINI_API_KEY` de tu environment y la guarda como secreto de una función de Supabase (`supabase/functions/gemini`). La app le habla a esa función, que comprueba la sesión, aplica un límite diario por usuario (150 consultas por defecto) y reenvía la petición a Gemini.
 
 ```
-App Android ──► Supabase (base de datos de grupos + función "gemini") ──► Gemini 3.6 Flash
+App Android ──► Supabase (base de datos de grupos + función "gemini") ──► Gemini 3.5 Flash-Lite
                          ▲
         GitHub Actions despliega todo con los secretos del environment "production"
 ```
@@ -42,7 +42,7 @@ En este repositorio ve a **Settings → Environments → `production`** (créalo
 | `SUPABASE_ACCESS_TOKEN` | El access token del paso 1.2 |
 
 Opcional, como *Environment variables*:
-- `GEMINI_MODEL`: por defecto `gemini-3.6-flash`.
+- `GEMINI_MODEL`: por defecto `gemini-3.5-flash-lite`.
 - `AI_DAILY_LIMIT`: por defecto `150`.
 - `SUPABASE_REGION`: por ejemplo `sa-east-1` para Sudamérica. Por defecto se usa una región de América.
 - `SUPABASE_PROJECT_REF`: solo si quieres usar un proyecto que ya tengas, en vez de que se cree uno llamado `macro-tracker`.

@@ -232,7 +232,7 @@ smoke_test() {
     echo "Gemini respondió HTTP $code, reintentando en 20 s…"
     sleep "${SUPABASE_POLL_SECONDS:-20}"
   done
-  echo "Gemini (${GEMINI_MODEL:-gemini-3.6-flash}): ok -> $answer"
+  echo "Gemini (${GEMINI_MODEL:-gemini-3.5-flash-lite}): ok -> $answer"
 }
 
 case "${1:-}" in
