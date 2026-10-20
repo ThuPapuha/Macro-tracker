@@ -9,6 +9,7 @@ import io.github.thupapuha.macrotracker.core.ai.GeminiTransport
 import io.github.thupapuha.macrotracker.core.supabase.GroupApi
 import io.github.thupapuha.macrotracker.core.supabase.SupabaseClient
 import io.github.thupapuha.macrotracker.core.supabase.SupabaseConfig
+import io.github.thupapuha.macrotracker.data.AppUpdater
 import io.github.thupapuha.macrotracker.data.FoodDatabase
 import io.github.thupapuha.macrotracker.data.FoodRepository
 import io.github.thupapuha.macrotracker.data.MediaReader
@@ -47,6 +48,8 @@ class AppContainer(context: Context) {
     val ai = AiService(GeminiClient { geminiTransport() })
 
     val summarySync = SummarySync(appScope, foodRepository, settings, groupApi)
+
+    val updater = AppUpdater(context, http, appScope)
 
     /** A key typed in Perfil wins; otherwise requests go through the Supabase proxy. */
     private suspend fun geminiTransport(): GeminiTransport {

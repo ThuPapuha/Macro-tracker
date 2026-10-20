@@ -67,6 +67,10 @@ Cada push a `main` repite el proceso y publica una versión nueva.
 
 Las versiones nuevas se instalan encima de la anterior sin perder datos, porque todas se firman con la misma llave (`app/signing/macrotracker.jks`).
 
+### Actualizaciones
+
+La app revisa las Releases de este repositorio al abrirse (como máximo cada 6 horas). Si hay una versión nueva, muestra un aviso con el botón **Actualizar**: la descarga y abre el instalador de Android, que siempre pide confirmar. La primera vez, Android te pide permitir que Macro Tracker instale apps. También puedes buscar a mano en *Perfil → Buscar actualización*.
+
 ## Notas
 
 - **Sin Supabase** la app igual funciona para registrar comidas. Para la IA puedes poner tu propia clave en *Perfil → Usar mi propia clave*; queda guardada solo en ese teléfono.
