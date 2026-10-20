@@ -14,7 +14,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
-const val DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+const val DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 class AiException(message: String, cause: Throwable? = null) : Exception(message, cause)
 

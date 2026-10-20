@@ -5,7 +5,7 @@
 // Supabase session, applies a per-user daily limit and forwards the request to Gemini.
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-3.6-flash";
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-3.5-flash-lite";
 const DAILY_LIMIT = Number(Deno.env.get("AI_DAILY_LIMIT") || "150");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const MAX_BODY_BYTES = 20 * 1024 * 1024;
