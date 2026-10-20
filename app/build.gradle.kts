@@ -35,6 +35,8 @@ android {
         buildConfigField("String", "SUPABASE_URL", setting("SUPABASE_URL").quoted())
         buildConfigField("String", "SUPABASE_ANON_KEY", setting("SUPABASE_ANON_KEY").quoted())
         buildConfigField("String", "GEMINI_MODEL", setting("GEMINI_MODEL", "gemini-3.5-flash-lite").quoted())
+        // GitHub repo whose releases the app checks for updates (set automatically in Actions).
+        buildConfigField("String", "UPDATE_REPO", setting("GITHUB_REPOSITORY", "ThuPapuha/Macro-tracker").quoted())
     }
 
     signingConfigs {

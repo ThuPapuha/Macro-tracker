@@ -38,12 +38,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import io.github.thupapuha.macrotracker.MacroTrackerApp
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.model.Macros
 import io.github.thupapuha.macrotracker.core.model.MealType
@@ -55,6 +57,7 @@ import io.github.thupapuha.macrotracker.data.mealType
 import io.github.thupapuha.macrotracker.ui.common.FoodDraft
 import io.github.thupapuha.macrotracker.ui.common.FoodEditDialog
 import io.github.thupapuha.macrotracker.ui.common.MacroSummaryCard
+import io.github.thupapuha.macrotracker.ui.common.UpdateBanner
 import io.github.thupapuha.macrotracker.ui.common.appViewModel
 import io.github.thupapuha.macrotracker.ui.common.dayLabel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
@@ -119,6 +122,8 @@ fun TodayScreen(
     val targets by vm.targets.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
     val isToday = date == LocalDate.now()
+    val updater = (LocalContext.current.applicationContext as MacroTrackerApp).container.updater
+    val updateState by updater.state.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -160,6 +165,9 @@ fun TodayScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (onBack == null && updateState.showsBanner) {
+                item(key = "update") { UpdateBanner(updater, updateState) }
+            }
             item(key = "summary") {
                 MacroSummaryCard(Macros.sum(entries.map { it.macros }), targets)
             }

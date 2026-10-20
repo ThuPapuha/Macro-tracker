@@ -17,4 +17,9 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        (application as MacroTrackerApp).container.updater.checkIfDue()
+    }
 }

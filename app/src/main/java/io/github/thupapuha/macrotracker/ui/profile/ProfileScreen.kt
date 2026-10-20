@@ -44,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,6 +54,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.github.thupapuha.macrotracker.BuildConfig
+import io.github.thupapuha.macrotracker.MacroTrackerApp
 import io.github.thupapuha.macrotracker.core.ai.AiService
 import io.github.thupapuha.macrotracker.core.ai.DocumentPreparer
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
@@ -64,9 +66,11 @@ import io.github.thupapuha.macrotracker.core.nutrition.NutritionCalculator
 import io.github.thupapuha.macrotracker.core.nutrition.Sex
 import io.github.thupapuha.macrotracker.data.MediaReader
 import io.github.thupapuha.macrotracker.data.SettingsStore
+import io.github.thupapuha.macrotracker.data.UpdateState
 import io.github.thupapuha.macrotracker.data.UserSettings
 import io.github.thupapuha.macrotracker.ui.common.ErrorText
 import io.github.thupapuha.macrotracker.ui.common.NumberField
+import io.github.thupapuha.macrotracker.ui.common.UpdateBanner
 import io.github.thupapuha.macrotracker.ui.common.appViewModel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
 import io.github.thupapuha.macrotracker.ui.common.inputAmount
@@ -150,6 +154,8 @@ class ProfileViewModel(
 fun ProfileScreen() {
     val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.serverConfigured) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val updater = (LocalContext.current.applicationContext as MacroTrackerApp).container.updater
+    val updateState by updater.state.collectAsStateWithLifecycle()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     var documentNote by rememberSaveable { mutableStateOf("") }
     val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -166,6 +172,7 @@ fun ProfileScreen() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            UpdateBanner(updater, updateState)
             TargetsCard(
                 targets = settings.targets,
                 onUpload = { dialog = "document" },
@@ -218,7 +225,22 @@ fun ProfileScreen() {
                         "Servidor de grupos: " + if (vm.serverConfigured) "configurado ✅" else "no configurado",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Text("Versión ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Versión ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall)
+                            when (val update = updateState) {
+                                UpdateState.Checking -> "Buscando actualizaciones…"
+                                UpdateState.UpToDate -> "Tienes la última versión."
+                                is UpdateState.Failed -> update.message.takeIf { update.update == null }
+                                else -> null
+                            }?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (updater.enabled) {
+                            TextButton(onClick = { updater.check(manual = true) }) { Text("Buscar actualización") }
+                        }
+                    }
                 }
             }
         }
