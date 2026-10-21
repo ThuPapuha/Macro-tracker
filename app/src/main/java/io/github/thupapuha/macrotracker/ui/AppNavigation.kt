@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -20,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -28,25 +28,37 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import io.github.thupapuha.macrotracker.MacroTrackerApp
+import io.github.thupapuha.macrotracker.R
 import io.github.thupapuha.macrotracker.core.model.MealType
 import io.github.thupapuha.macrotracker.ui.add.AddFoodScreen
 import io.github.thupapuha.macrotracker.ui.groups.GroupsScreen
 import io.github.thupapuha.macrotracker.ui.history.HistoryScreen
 import io.github.thupapuha.macrotracker.ui.profile.ProfileScreen
+import io.github.thupapuha.macrotracker.ui.progress.ProgressScreen
+import io.github.thupapuha.macrotracker.ui.progress.RoutineEditorScreen
+import io.github.thupapuha.macrotracker.ui.progress.WorkoutScreen
 import io.github.thupapuha.macrotracker.ui.today.TodayScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 
-private data class Tab(val route: String, val label: String, val icon: ImageVector)
+/** A bottom bar tab; [iconRes] is used for icons that are not in the core icon set. */
+private data class Tab(val route: String, val label: String, val icon: ImageVector? = null, val iconRes: Int = 0)
 
 private val tabs = listOf(
     Tab("today", "Hoy", Icons.Filled.Home),
     Tab("history", "Historial", Icons.Filled.DateRange),
-    Tab("groups", "Grupos", Icons.Filled.Face),
+    Tab("progress", "Progreso", iconRes = R.drawable.ic_dumbbell),
+    Tab("groups", "Grupos", iconRes = R.drawable.ic_people),
     Tab("profile", "Perfil", Icons.Filled.AccountCircle),
 )
 
 private fun NavHostController.openAddFood(date: LocalDate, meal: MealType) = navigate("add/$date/${meal.name}")
+
+private fun NavHostController.openTab(route: String) = navigate(route) {
+    popUpTo(graph.findStartDestination().id) { saveState = true }
+    launchSingleTop = true
+    restoreState = true
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -57,11 +69,7 @@ fun AppNavigation(openGroupRequests: MutableStateFlow<String?>) {
     LaunchedEffect(openGroup) {
         val groupId = openGroup ?: return@LaunchedEffect
         settings.setLastGroup(groupId)
-        nav.navigate("groups") {
-            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
+        nav.openTab("groups")
         openGroupRequests.value = null
     }
     val backStack by nav.currentBackStackEntryAsState()
@@ -76,15 +84,15 @@ fun AppNavigation(openGroupRequests: MutableStateFlow<String?>) {
                     tabs.forEach { tab ->
                         NavigationBarItem(
                             selected = route == tab.route,
-                            onClick = {
-                                nav.navigate(tab.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                            onClick = { nav.openTab(tab.route) },
+                            icon = {
+                                if (tab.icon != null) {
+                                    Icon(tab.icon, contentDescription = null)
+                                } else {
+                                    Icon(painterResource(tab.iconRes), contentDescription = null)
                                 }
                             },
-                            icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label) },
+                            label = { Text(tab.label, maxLines = 1) },
                         )
                     }
                 }
@@ -101,7 +109,8 @@ fun AppNavigation(openGroupRequests: MutableStateFlow<String?>) {
                     initialDate = null,
                     onBack = null,
                     onAddFood = nav::openAddFood,
-                    onOpenProfile = { nav.navigate("profile") { launchSingleTop = true } },
+                    onOpenProfile = { nav.openTab("profile") },
+                    onTrain = { nav.openTab("progress") },
                 )
             }
             composable("day/{date}") { entry ->
@@ -110,7 +119,7 @@ fun AppNavigation(openGroupRequests: MutableStateFlow<String?>) {
                     initialDate = date,
                     onBack = { nav.popBackStack() },
                     onAddFood = nav::openAddFood,
-                    onOpenProfile = { nav.navigate("profile") { launchSingleTop = true } },
+                    onOpenProfile = { nav.openTab("profile") },
                 )
             }
             composable("add/{date}/{meal}") { entry ->
@@ -120,6 +129,20 @@ fun AppNavigation(openGroupRequests: MutableStateFlow<String?>) {
             }
             composable("history") {
                 HistoryScreen(onOpenDay = { nav.navigate("day/$it") })
+            }
+            composable("progress") {
+                ProgressScreen(
+                    onStartWorkout = { routineId -> nav.navigate("workout/${routineId ?: "free"}") },
+                    onEditRoutine = { routineId -> nav.navigate("routine/${routineId ?: "new"}") },
+                )
+            }
+            composable("routine/{id}") { entry ->
+                val id = entry.arguments?.getString("id")?.takeIf { it != "new" }
+                RoutineEditorScreen(routineId = id, onDone = { nav.popBackStack() })
+            }
+            composable("workout/{routine}") { entry ->
+                val routineId = entry.arguments?.getString("routine")?.takeIf { it != "free" }
+                WorkoutScreen(routineId = routineId, onDone = { nav.popBackStack() })
             }
             composable("groups") {
                 GroupsScreen()

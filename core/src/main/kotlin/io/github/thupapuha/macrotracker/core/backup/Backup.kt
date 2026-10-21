@@ -1,5 +1,7 @@
 package io.github.thupapuha.macrotracker.core.backup
 
+import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
+import io.github.thupapuha.macrotracker.core.gym.WeightGoal
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.net.AppJson
 import io.github.thupapuha.macrotracker.core.supabase.AuthSession
@@ -20,6 +22,29 @@ data class BackupEntry(
     val createdAt: Long = 0,
 )
 
+@Serializable
+data class BackupRoutine(
+    val id: String,
+    val name: String,
+    val exercises: List<ExerciseLog> = emptyList(),
+    val position: Int = 0,
+)
+
+@Serializable
+data class BackupWorkout(
+    val id: String,
+    val date: String,
+    val title: String,
+    val routineId: String? = null,
+    val exercises: List<ExerciseLog> = emptyList(),
+    val prCount: Int = 0,
+    val durationMin: Int? = null,
+    val finishedAt: Long = 0,
+)
+
+@Serializable
+data class BackupWeight(val date: String, val kg: Double)
+
 /**
  * Everything needed to rebuild the app after a reinstall: the food log, goals and, if the user was
  * in groups, the anonymous session so they come back as the same member.
@@ -27,7 +52,7 @@ data class BackupEntry(
 @Serializable
 data class BackupFile(
     val app: String = APP_ID,
-    val format: Int = 1,
+    val format: Int = 2,
     val exportedAt: String,
     val entries: List<BackupEntry> = emptyList(),
     val targets: MacroTargets? = null,
@@ -35,6 +60,12 @@ data class BackupFile(
     val lastGroupId: String = "",
     val hadGroups: Boolean = false,
     val session: AuthSession? = null,
+    // Added in format 2; older files simply have none.
+    val routines: List<BackupRoutine> = emptyList(),
+    val workouts: List<BackupWorkout> = emptyList(),
+    val weights: List<BackupWeight> = emptyList(),
+    val weightGoal: WeightGoal? = null,
+    val shareWeight: Boolean = true,
 ) {
     companion object {
         const val APP_ID = "macro-tracker"

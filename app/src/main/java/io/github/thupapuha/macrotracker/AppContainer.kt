@@ -15,6 +15,9 @@ import io.github.thupapuha.macrotracker.data.FoodDatabase
 import io.github.thupapuha.macrotracker.data.FoodRepository
 import io.github.thupapuha.macrotracker.data.GroupActivityNotifier
 import io.github.thupapuha.macrotracker.data.MediaReader
+import io.github.thupapuha.macrotracker.data.ProgressDatabase
+import io.github.thupapuha.macrotracker.data.ProgressRepository
+import io.github.thupapuha.macrotracker.data.ProgressSync
 import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.SummarySync
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +32,7 @@ class AppContainer(context: Context) {
 
     val settings = SettingsStore(context)
     val foodRepository = FoodRepository(FoodDatabase.build(context).foodDao())
+    val progressRepository = ProgressRepository(ProgressDatabase.build(context).progressDao())
     val media = MediaReader(context)
 
     private val http = OkHttpClient.Builder()
@@ -51,9 +55,12 @@ class AppContainer(context: Context) {
 
     val summarySync = SummarySync(appScope, foodRepository, settings, groupApi)
 
+    val progressSync = ProgressSync(appScope, progressRepository, settings, groupApi)
+
     val backup = BackupManager(
         context,
         foodRepository,
+        progressRepository,
         settings,
         restoreSession = { session -> supabase?.replaceSession(session) },
         scope = appScope,

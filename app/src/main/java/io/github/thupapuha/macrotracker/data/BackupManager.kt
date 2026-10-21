@@ -23,7 +23,13 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.time.Instant
 
-data class ImportResult(val added: Int, val alreadyPresent: Int, val restoredGroups: Boolean)
+data class ImportResult(
+    val added: Int,
+    val alreadyPresent: Int,
+    val restoredGroups: Boolean,
+    val addedWorkouts: Int = 0,
+    val addedWeights: Int = 0,
+)
 
 /**
  * The food log only lives on the phone, so uninstalling would lose it. This keeps a copy in
@@ -32,6 +38,7 @@ data class ImportResult(val added: Int, val alreadyPresent: Int, val restoredGro
 class BackupManager(
     context: Context,
     private val repository: FoodRepository,
+    private val progress: ProgressRepository,
     private val settings: SettingsStore,
     private val restoreSession: suspend (AuthSession) -> Unit,
     private val scope: CoroutineScope,
@@ -47,6 +54,7 @@ class BackupManager(
 
     fun start() {
         scope.launch { repository.changedDays.collect { dirty = true } }
+        scope.launch { progress.changed.collect { dirty = true } }
     }
 
     /** Called when the app goes to the background. */
@@ -92,8 +100,11 @@ class BackupManager(
         val missing = Backups.missingEntries(existing, backup.entries)
         repository.add(missing.map { it.toEntry() })
 
+        val (addedWorkouts, addedWeights) = progress.importBackup(backup.routines, backup.workouts, backup.weights)
+
         val prefs = settings.current()
         if (prefs.targets == null) backup.targets?.let { settings.setTargets(it) }
+        if (prefs.weightGoal == null && backup.weightGoal != null) settings.setWeightGoal(backup.weightGoal, backup.shareWeight)
 
         // Coming back as the same group member only makes sense on an install without groups.
         val session = backup.session
@@ -107,7 +118,7 @@ class BackupManager(
             settings.setDisplayName(backup.displayName, synced = restoreGroups)
         }
         dirty = true
-        return ImportResult(missing.size, backup.entries.size - missing.size, restoreGroups)
+        return ImportResult(missing.size, backup.entries.size - missing.size, restoreGroups, addedWorkouts, addedWeights)
     }
 
     private suspend fun snapshot(): BackupFile {
@@ -120,6 +131,11 @@ class BackupManager(
             lastGroupId = prefs.lastGroupId,
             hadGroups = prefs.hasGroups,
             session = if (prefs.hasGroups) settings.sessionStore.load() else null,
+            routines = progress.backupRoutines(),
+            workouts = progress.backupWorkouts(),
+            weights = progress.backupWeights(),
+            weightGoal = prefs.weightGoal,
+            shareWeight = prefs.shareWeight,
         )
     }
 

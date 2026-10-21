@@ -66,13 +66,16 @@ import io.github.thupapuha.macrotracker.core.nutrition.BodyProfile
 import io.github.thupapuha.macrotracker.core.nutrition.Goal
 import io.github.thupapuha.macrotracker.core.nutrition.NutritionCalculator
 import io.github.thupapuha.macrotracker.core.nutrition.Sex
+import io.github.thupapuha.macrotracker.core.supabase.GroupApi
 import io.github.thupapuha.macrotracker.data.BackupManager
 import io.github.thupapuha.macrotracker.data.MediaReader
 import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.UpdateState
 import io.github.thupapuha.macrotracker.data.UserSettings
+import io.github.thupapuha.macrotracker.ui.common.Avatar
 import io.github.thupapuha.macrotracker.ui.common.ErrorText
 import io.github.thupapuha.macrotracker.ui.common.NumberField
+import io.github.thupapuha.macrotracker.ui.common.TextInputDialog
 import io.github.thupapuha.macrotracker.ui.common.UpdateBanner
 import io.github.thupapuha.macrotracker.ui.common.appViewModel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
@@ -102,9 +105,38 @@ class ProfileViewModel(
     private val ai: AiService,
     private val media: MediaReader,
     private val backup: BackupManager,
+    private val groupApi: GroupApi?,
     val serverConfigured: Boolean,
 ) : ViewModel() {
     val autoBackupSupported = backup.autoBackupSupported
+
+    /** Same seed as in the groups so the avatar keeps its colors. */
+    var avatarSeed by mutableStateOf("")
+        private set
+
+    init {
+        viewModelScope.launch { avatarSeed = settings.sessionStore.load()?.userId.orEmpty() }
+    }
+
+    fun saveName(name: String) {
+        viewModelScope.launch {
+            settings.setDisplayName(name, synced = false)
+            val api = groupApi ?: return@launch
+            if (!settings.current().hasGroups) return@launch
+            try {
+                api.setDisplayName(name)
+                settings.setDisplayName(name, synced = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Uploaded with the next sync.
+            }
+        }
+    }
+
+    fun setShareWeight(value: Boolean) {
+        viewModelScope.launch { settings.setWeightGoal(settings.current().weightGoal, value) }
+    }
 
     var backupMessage by mutableStateOf<String?>(null)
         private set
@@ -120,6 +152,8 @@ class ProfileViewModel(
             append(if (result.added == 1) "Se importó 1 alimento" else "Se importaron ${result.added} alimentos")
             if (result.alreadyPresent > 0) append(" (${result.alreadyPresent} ya estaban)")
             append(".")
+            if (result.addedWorkouts > 0) append(" Entrenamientos: ${result.addedWorkouts}.")
+            if (result.addedWeights > 0) append(" Registros de peso: ${result.addedWeights}.")
             if (result.restoredGroups) append(" Recuperaste tu usuario de grupos.")
         }
     }
@@ -198,7 +232,7 @@ class ProfileViewModel(
 
 @Composable
 fun ProfileScreen() {
-    val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.backup, it.serverConfigured) }
+    val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.backup, it.groupApi, it.serverConfigured) }
     val state by vm.state.collectAsStateWithLifecycle()
     val updater = (LocalContext.current.applicationContext as MacroTrackerApp).container.updater
     val updateState by updater.state.collectAsStateWithLifecycle()
@@ -216,7 +250,7 @@ fun ProfileScreen() {
     }
     val settings = state ?: return
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Perfil y objetivos") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("Perfil") }) }) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -225,6 +259,20 @@ fun ProfileScreen() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            ElevatedCard(onClick = { dialog = "name" }, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(settings.displayName.ifBlank { "Yo" }, vm.avatarSeed.ifBlank { settings.displayName }, diameter = 64.dp)
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(settings.displayName.ifBlank { "Sin nombre" }, style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Así te ven tus amigos en los grupos. Toca para cambiarlo.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             TargetsCard(
                 targets = settings.targets,
                 onUpload = { dialog = "document" },
@@ -258,9 +306,20 @@ fun ProfileScreen() {
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
+                            Text("Compartir mi peso con mis grupos", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Tu peso, tu meta y tu avance. Tus entrenamientos siempre se comparten.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = settings.shareWeight, onCheckedChange = vm::setShareWeight)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
                             Text("Avisarme de la actividad de mis grupos", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "Notificación cuando un amigo registra comida o comenta la tuya (revisa cada ~15 min).",
+                                "Cuando un amigo registra comida o un entreno, o comenta y reacciona a lo tuyo (revisa cada ~15 min).",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -339,6 +398,18 @@ fun ProfileScreen() {
     }
 
     when (dialog) {
+        "name" -> TextInputDialog(
+            title = "Tu nombre",
+            label = "Nombre o apodo",
+            message = "Así te verán tus amigos en los grupos.",
+            initial = settings.displayName,
+            confirmLabel = "Guardar",
+            onDismiss = { dialog = null },
+            onConfirm = {
+                vm.saveName(it.take(40))
+                dialog = null
+            },
+        )
         "document" -> DocumentDialog(
             note = documentNote,
             onNoteChange = { documentNote = it },

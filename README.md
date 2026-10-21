@@ -10,11 +10,18 @@ App Android para registrar los macros de tus comidas día a día, con grupos par
   - **Manual**: si dejas las kcal vacías, se calculan con los macros.
   - **Recientes**: repite algo que ya comiste con un toque.
 - **Historial**: gráfico de calorías de 7, 14 o 30 días, promedios y días que cumpliste tu objetivo.
-- **Grupos**: crea un grupo y comparte el código de 6 letras. La pestaña abre directo tu último grupo (cámbialo desde el título) y muestra el progreso diario de cada amigo frente a sus objetivos de calorías y macros, lo que comieron (si lo comparten) y un ranking semanal. Puedes comentar el día de alguien o un alimento concreto.
-- **Notificaciones**: te avisa cuando un amigo registra comida o comenta la tuya. No hay servidor de notificaciones push: la app revisa cada ~15 minutos en segundo plano (puedes apagarlo en Perfil).
-- **Perfil**: sube un PDF, una imagen, un Word o un texto y la IA fija tus calorías y macros objetivo. También hay una calculadora (Mifflin-St Jeor) y edición manual.
+- **Progreso**:
+  - **Peso**: registra tu peso, ponle una meta (peso inicial y peso meta) y mira cuánto te falta y el gráfico de los últimos 90 días.
+  - **Gym**: arma tus rutinas con los ejercicios que quieras y, para cada uno, sus series con repeticiones y peso. Al entrenar, cambias las repes y los kilos de cada serie y las marcas al terminarlas; la rutina recuerda lo último que levantaste para la próxima vez. La app detecta tus récords (más peso que nunca, o más repes con tu mayor peso) y guarda el historial y el progreso de cada ejercicio. Si cierras la app a mitad de entrenamiento, al volver sigue donde lo dejaste.
+- **Grupos** (tipo red social): crea un grupo y comparte el código de 6 letras.
+  - Arriba ves a cada amigo como una "historia" cuyo anillo se llena con las calorías del día (y se pinta de colores cuando cumple su objetivo). Toca a alguien para ver su perfil: su peso y meta (si los comparte), sus entrenamientos recientes y sus mejores marcas.
+  - **Feed**: las comidas del día, los entrenamientos (con sus récords 🏆) y los registros de peso de todos. Puedes reaccionar (👍🔥💪👏😂) y comentar cada publicación o un alimento concreto.
+  - **Hoy**: el progreso diario de cada uno frente a sus objetivos de calorías y macros.
+  - **Ranking**: días en objetivo de alimentación, entrenos y récords de la semana, y avance hacia las metas de peso.
+- **Notificaciones**: te avisa cuando un amigo registra comida o un entrenamiento, y cuando comentan o reaccionan a lo tuyo. No hay servidor de notificaciones push: la app revisa cada ~15 minutos en segundo plano (puedes apagarlo en Perfil).
+- **Perfil**: tu nombre, tus objetivos (sube un PDF, una imagen, un Word o un texto y la IA fija tus calorías y macros; o usa la calculadora Mifflin-St Jeor o edítalos a mano) y qué compartes con tus grupos.
 
-Tus comidas se guardan en el teléfono. Con los grupos solo se comparten los totales del día y, si lo permites, los nombres de los alimentos.
+Tus datos se guardan en el teléfono. Con los grupos se comparten los totales del día y, si lo permites, los nombres de los alimentos; tus entrenamientos; y tu peso con su meta, salvo que lo desactives en *Perfil → Compartir mi peso*.
 
 ## Cómo funciona la clave de Gemini
 
@@ -74,7 +81,7 @@ Tus comidas se guardan en el teléfono. Para no perderlas:
 
 - **Nunca desinstales para actualizar.** Instalar una versión nueva encima de la anterior conserva los datos, porque todas las versiones están firmadas con la misma llave. Desinstalar sí los borra.
 - Cada vez que sales de la app (y antes de instalar una actualización) se guarda una copia en **Descargas › MacroTracker › macrotracker-respaldo.json** (Android 10 o superior). Ese archivo se conserva aunque desinstales la app.
-- Si reinstalas, ve a **Perfil › Respaldo › Importar** y elige ese archivo. Se recuperan tus comidas, tus objetivos y, si estabas en grupos, tu mismo usuario de grupos. No compartas ese archivo: permite entrar a tus grupos como tú.
+- Si reinstalas, ve a **Perfil › Respaldo › Importar** y elige ese archivo. Se recuperan tus comidas, tus objetivos, tus rutinas, entrenamientos y registros de peso y, si estabas en grupos, tu mismo usuario de grupos. No compartas ese archivo: permite entrar a tus grupos como tú.
 - También puedes exportar un respaldo a mano desde el mismo lugar.
 
 ### Actualizaciones
@@ -91,6 +98,6 @@ La app revisa las Releases de este repositorio al abrirse (como máximo cada 6 h
 
 ## Desarrollo
 
-- `core/`: lógica en Kotlin puro (cálculos, cliente de Gemini y de Supabase) con pruebas: `./gradlew :core:test`
-- `app/`: interfaz en Jetpack Compose, base local Room. Compilar: `./gradlew :app:assembleRelease`. Para apuntar a tu Supabase en local, define `SUPABASE_URL` y `SUPABASE_ANON_KEY` en `local.properties`.
+- `core/`: lógica en Kotlin puro (cálculos de nutrición y de gym, cliente de Gemini y de Supabase) con pruebas: `./gradlew :core:test`
+- `app/`: interfaz en Jetpack Compose, bases locales Room (`macro-tracker.db` para comidas y `progress.db` para rutinas, entrenamientos y peso). Compilar: `./gradlew :app:assembleRelease`. Para apuntar a tu Supabase en local, define `SUPABASE_URL` y `SUPABASE_ANON_KEY` en `local.properties`.
 - `supabase/`: esquema SQL y la función que llama a Gemini.
