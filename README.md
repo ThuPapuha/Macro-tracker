@@ -10,7 +10,8 @@ App Android para registrar los macros de tus comidas día a día, con grupos par
   - **Manual**: si dejas las kcal vacías, se calculan con los macros.
   - **Recientes**: repite algo que ya comiste con un toque.
 - **Historial**: gráfico de calorías de 7, 14 o 30 días, promedios y días que cumpliste tu objetivo.
-- **Grupos**: crea un grupo, comparte el código de 6 letras y ve el progreso diario de tus amigos, lo que comieron (si lo comparten) y un ranking semanal.
+- **Grupos**: crea un grupo y comparte el código de 6 letras. La pestaña abre directo tu último grupo (cámbialo desde el título) y muestra el progreso diario de cada amigo frente a sus objetivos de calorías y macros, lo que comieron (si lo comparten) y un ranking semanal. Puedes comentar el día de alguien o un alimento concreto.
+- **Notificaciones**: te avisa cuando un amigo registra comida o comenta la tuya. No hay servidor de notificaciones push: la app revisa cada ~15 minutos en segundo plano (puedes apagarlo en Perfil).
 - **Perfil**: sube un PDF, una imagen, un Word o un texto y la IA fija tus calorías y macros objetivo. También hay una calculadora (Mifflin-St Jeor) y edición manual.
 
 Tus comidas se guardan en el teléfono. Con los grupos solo se comparten los totales del día y, si lo permites, los nombres de los alimentos.

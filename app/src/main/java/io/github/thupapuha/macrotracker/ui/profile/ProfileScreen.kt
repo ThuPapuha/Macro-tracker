@@ -2,7 +2,9 @@
 
 package io.github.thupapuha.macrotracker.ui.profile
 
+import android.Manifest
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -145,6 +147,10 @@ class ProfileViewModel(
         viewModelScope.launch { settings.setOwnGemini(apiKey, model) }
     }
 
+    fun setNotifyGroupActivity(value: Boolean) {
+        viewModelScope.launch { settings.setNotifyGroupActivity(value) }
+    }
+
     fun setShareMeals(value: Boolean) {
         viewModelScope.launch { settings.setShareMeals(value) }
     }
@@ -158,6 +164,7 @@ fun ProfileScreen() {
     val updateState by updater.state.collectAsStateWithLifecycle()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     var documentNote by rememberSaveable { mutableStateOf("") }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.analyzeDocument(uri, documentNote)
     }
@@ -203,6 +210,25 @@ fun ProfileScreen() {
                             )
                         }
                         Switch(checked = settings.shareMeals, onCheckedChange = vm::setShareMeals)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Avisarme de la actividad de mis grupos", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Notificación cuando un amigo registra comida o comenta la tuya (revisa cada ~15 min).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = settings.notifyGroupActivity,
+                            onCheckedChange = { enabled ->
+                                vm.setNotifyGroupActivity(enabled)
+                                if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            },
+                        )
                     }
                     HorizontalDivider()
                     Text("Inteligencia artificial", style = MaterialTheme.typography.bodyLarge)

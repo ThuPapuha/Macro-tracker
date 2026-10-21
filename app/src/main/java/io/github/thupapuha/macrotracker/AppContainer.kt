@@ -12,6 +12,7 @@ import io.github.thupapuha.macrotracker.core.supabase.SupabaseConfig
 import io.github.thupapuha.macrotracker.data.AppUpdater
 import io.github.thupapuha.macrotracker.data.FoodDatabase
 import io.github.thupapuha.macrotracker.data.FoodRepository
+import io.github.thupapuha.macrotracker.data.GroupActivityNotifier
 import io.github.thupapuha.macrotracker.data.MediaReader
 import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.SummarySync
@@ -50,6 +51,8 @@ class AppContainer(context: Context) {
     val summarySync = SummarySync(appScope, foodRepository, settings, groupApi)
 
     val updater = AppUpdater(context, http, appScope)
+
+    val groupNotifier = GroupActivityNotifier(context, groupApi, settings, appScope)
 
     /** A key typed in Perfil wins; otherwise requests go through the Supabase proxy. */
     private suspend fun geminiTransport(): GeminiTransport {

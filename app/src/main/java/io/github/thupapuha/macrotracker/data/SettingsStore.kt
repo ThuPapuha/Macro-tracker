@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import java.io.IOException
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -34,7 +35,23 @@ data class UserSettings(
     val ownGeminiKey: String = "",
     val geminiModel: String = "",
     val bodyProfile: BodyProfile? = null,
+    /** Group shown when the Grupos tab opens. */
+    val lastGroupId: String = "",
+    val notifyGroupActivity: Boolean = true,
+    val notificationPermissionAsked: Boolean = false,
 )
+
+/** Last friends' days and comments already notified, so each change is announced once. */
+@Serializable
+data class ActivitySeen(
+    val cursor: String? = null,
+    /** "userId|day" -> last updated_at and food names seen. */
+    val days: Map<String, SeenDay> = emptyMap(),
+    val commentIds: List<String> = emptyList(),
+)
+
+@Serializable
+data class SeenDay(val updatedAt: String, val foods: List<String>)
 
 class SettingsStore(context: Context) {
     private val store = context.applicationContext.dataStore
@@ -58,6 +75,10 @@ class SettingsStore(context: Context) {
         val bodyHeight = doublePreferencesKey("body_height")
         val bodyActivity = stringPreferencesKey("body_activity")
         val bodyGoal = stringPreferencesKey("body_goal")
+        val lastGroupId = stringPreferencesKey("last_group_id")
+        val notifyGroupActivity = booleanPreferencesKey("notify_group_activity")
+        val notificationPermissionAsked = booleanPreferencesKey("notification_permission_asked")
+        val activitySeen = stringPreferencesKey("activity_seen")
     }
 
     private val preferences: Flow<Preferences> = store.data.catch { e ->
@@ -82,6 +103,9 @@ class SettingsStore(context: Context) {
             ownGeminiKey = p[Keys.geminiKey].orEmpty(),
             geminiModel = p[Keys.geminiModel].orEmpty(),
             bodyProfile = readBodyProfile(p),
+            lastGroupId = p[Keys.lastGroupId].orEmpty(),
+            notifyGroupActivity = p[Keys.notifyGroupActivity] ?: true,
+            notificationPermissionAsked = p[Keys.notificationPermissionAsked] ?: false,
         )
     }
 
@@ -117,6 +141,26 @@ class SettingsStore(context: Context) {
             it[Keys.geminiKey] = apiKey.trim()
             it[Keys.geminiModel] = model.trim()
         }
+    }
+
+    suspend fun setLastGroup(groupId: String) {
+        store.edit { it[Keys.lastGroupId] = groupId }
+    }
+
+    suspend fun setNotifyGroupActivity(value: Boolean) {
+        store.edit { it[Keys.notifyGroupActivity] = value }
+    }
+
+    suspend fun setNotificationPermissionAsked() {
+        store.edit { it[Keys.notificationPermissionAsked] = true }
+    }
+
+    suspend fun activitySeen(): ActivitySeen = preferences.first()[Keys.activitySeen]?.let {
+        runCatching { AppJson.decodeFromString(ActivitySeen.serializer(), it) }.getOrNull()
+    } ?: ActivitySeen()
+
+    suspend fun setActivitySeen(seen: ActivitySeen) {
+        store.edit { it[Keys.activitySeen] = AppJson.encodeToString(ActivitySeen.serializer(), seen) }
     }
 
     suspend fun setBodyProfile(profile: BodyProfile) {

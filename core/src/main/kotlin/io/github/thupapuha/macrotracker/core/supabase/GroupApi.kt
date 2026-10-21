@@ -58,6 +58,57 @@ data class DailySummary(
         }
 }
 
+@Serializable
+data class MealComment(
+    val id: String,
+    @SerialName("target_user") val targetUser: String,
+    val day: String,
+    @SerialName("meal_name") val mealName: String? = null,
+    @SerialName("author_id") val authorId: String,
+    @SerialName("author_name") val authorName: String = "Anónimo",
+    val body: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
+/** What changed in my groups since the last poll (see `group_activity` in schema.sql). */
+@Serializable
+data class GroupActivity(
+    val now: String,
+    val items: List<ActivityItem> = emptyList(),
+    val comments: List<ActivityComment> = emptyList(),
+)
+
+/** A friend's day whose food changed. */
+@Serializable
+data class ActivityItem(
+    @SerialName("user_id") val userId: String,
+    @SerialName("display_name") val displayName: String = "Anónimo",
+    @SerialName("group_id") val groupId: String,
+    @SerialName("group_name") val groupName: String = "",
+    val day: String,
+    val calories: Double = 0.0,
+    val protein: Double = 0.0,
+    val carbs: Double = 0.0,
+    val fat: Double = 0.0,
+    val meals: List<SharedMeal> = emptyList(),
+    @SerialName("updated_at") val updatedAt: String,
+) {
+    val totals: Macros get() = Macros(calories, protein, carbs, fat)
+}
+
+/** Someone commented on my food. */
+@Serializable
+data class ActivityComment(
+    val id: String,
+    @SerialName("group_id") val groupId: String,
+    @SerialName("group_name") val groupName: String = "",
+    val day: String,
+    @SerialName("meal_name") val mealName: String? = null,
+    val body: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("author_name") val authorName: String = "Anónimo",
+)
+
 /** Group features, implemented by the SQL functions in `supabase/schema.sql`. */
 class GroupApi(private val client: SupabaseClient) {
 
@@ -100,6 +151,41 @@ class GroupApi(private val client: SupabaseClient) {
     suspend fun upsertSummary(day: LocalDate, totals: Macros, targets: MacroTargets?, meals: List<SharedMeal>) {
         client.rpc("upsert_daily_summary", summaryArgs(day, totals, targets, meals))
     }
+
+    suspend fun comments(groupId: String, from: LocalDate, to: LocalDate): List<MealComment> = decode(
+        ListSerializer(MealComment.serializer()),
+        client.rpc(
+            "group_comments",
+            buildJsonObject {
+                put("p_group", groupId)
+                put("p_from", from.toString())
+                put("p_to", to.toString())
+            },
+        ),
+    )
+
+    suspend fun addComment(groupId: String, targetUser: String, day: LocalDate, mealName: String?, body: String) {
+        client.rpc(
+            "add_meal_comment",
+            buildJsonObject {
+                put("p_group", groupId)
+                put("p_target", targetUser)
+                put("p_day", day.toString())
+                put("p_meal", mealName)
+                put("p_body", body)
+            },
+        )
+    }
+
+    suspend fun deleteComment(commentId: String) {
+        client.rpc("delete_meal_comment", buildJsonObject { put("p_id", commentId) })
+    }
+
+    /** Pass null the first time to get only the server time to use as the next [since]. */
+    suspend fun activity(since: String?): GroupActivity = decode(
+        GroupActivity.serializer(),
+        client.rpc("group_activity", buildJsonObject { put("p_since", since) }),
+    )
 
     private fun <T> decode(serializer: KSerializer<T>, body: String): T = try {
         AppJson.decodeFromString(serializer, body)
