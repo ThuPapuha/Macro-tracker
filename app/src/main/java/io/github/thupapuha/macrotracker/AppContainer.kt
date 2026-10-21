@@ -10,6 +10,7 @@ import io.github.thupapuha.macrotracker.core.supabase.GroupApi
 import io.github.thupapuha.macrotracker.core.supabase.SupabaseClient
 import io.github.thupapuha.macrotracker.core.supabase.SupabaseConfig
 import io.github.thupapuha.macrotracker.data.AppUpdater
+import io.github.thupapuha.macrotracker.data.BackupManager
 import io.github.thupapuha.macrotracker.data.FoodDatabase
 import io.github.thupapuha.macrotracker.data.FoodRepository
 import io.github.thupapuha.macrotracker.data.GroupActivityNotifier
@@ -50,7 +51,16 @@ class AppContainer(context: Context) {
 
     val summarySync = SummarySync(appScope, foodRepository, settings, groupApi)
 
-    val updater = AppUpdater(context, http, appScope)
+    val backup = BackupManager(
+        context,
+        foodRepository,
+        settings,
+        restoreSession = { session -> supabase?.replaceSession(session) },
+        scope = appScope,
+    )
+
+    // Save a backup right before installing an update, just in case.
+    val updater = AppUpdater(context, http, appScope, beforeInstall = { backup.backupNow() })
 
     val groupNotifier = GroupActivityNotifier(context, groupApi, settings, appScope)
 

@@ -21,6 +21,8 @@ class FoodRepository(private val dao: FoodDao) {
 
     suspend fun entriesFor(date: LocalDate): List<FoodEntry> = dao.getDay(date.toString())
 
+    suspend fun allEntries(): List<FoodEntry> = dao.getAll()
+
     suspend fun add(entries: List<FoodEntry>) {
         if (entries.isEmpty()) return
         dao.insertAll(entries)

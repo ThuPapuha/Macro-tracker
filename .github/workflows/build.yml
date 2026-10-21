@@ -123,7 +123,14 @@ jobs:
         run: ./gradlew :app:assembleRelease
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk "MacroTracker-${{ github.run_number }}.apk"
+        run: |
+          apk="MacroTracker-${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          # Read by the in-app updater through releases/latest/download/version.json.
+          jq -n --argjson code "${{ github.run_number }}" --arg apk "$apk" --argjson size "$(stat -c%s "$apk")" \
+            '{versionCode: $code, versionName: ("1.0." + ($code | tostring)), tag: ("build-" + ($code | tostring)), apk: $apk, size: $size}' \
+            > version.json
+          cat version.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -138,7 +145,9 @@ jobs:
           name: Macro Tracker ${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           make_latest: "true"
-          files: MacroTracker-${{ github.run_number }}.apk
+          files: |
+            MacroTracker-${{ github.run_number }}.apk
+            version.json
           body: |
             Descarga **MacroTracker-${{ github.run_number }}.apk** desde tu Android e instálalo
             (permite "instalar apps desconocidas" para tu navegador si te lo pide).

@@ -83,10 +83,6 @@ class GroupsViewModel(
     val prefs: StateFlow<UserSettings?> = settings.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    init {
-        refresh()
-    }
-
     fun refresh() = launchWithApi { api ->
         groups = api.myGroups()
         loaded = true
@@ -163,6 +159,8 @@ fun GroupsScreen() {
     val vm = appViewModel { GroupsViewModel(it.groupApi, it.settings, it.summarySync) }
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
+    // Reload the group list every time the tab is opened.
+    LaunchedEffect(Unit) { vm.refresh() }
     val settings = prefs ?: return
 
     val selectedId = settings.lastGroupId

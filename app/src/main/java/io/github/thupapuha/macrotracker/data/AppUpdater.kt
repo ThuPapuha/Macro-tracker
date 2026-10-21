@@ -47,6 +47,7 @@ class AppUpdater(
     context: Context,
     http: OkHttpClient,
     private val scope: CoroutineScope,
+    private val beforeInstall: suspend () -> Unit = {},
 ) {
     private val context = context.applicationContext
     private val checker = UpdateChecker(http, BuildConfig.UPDATE_REPO)
@@ -111,6 +112,13 @@ class AppUpdater(
             _state.value = UpdateState.Downloading(update, 0f)
             try {
                 val file = fetch(update)
+                try {
+                    beforeInstall()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Backup before update failed", e)
+                }
                 _state.value = UpdateState.ReadyToInstall(update, file)
                 install(file)
             } catch (e: CancellationException) {

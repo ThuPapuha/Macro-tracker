@@ -11,5 +11,6 @@ class MacroTrackerApp : Application() {
         container = AppContainer(this)
         container.summarySync.start()
         container.groupNotifier.start()
+        container.backup.start()
     }
 }

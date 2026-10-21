@@ -57,6 +57,9 @@ interface FoodDao {
     @Query("SELECT * FROM food_entries WHERE date = :date ORDER BY createdAt")
     suspend fun getDay(date: String): List<FoodEntry>
 
+    @Query("SELECT * FROM food_entries ORDER BY date, createdAt")
+    suspend fun getAll(): List<FoodEntry>
+
     @Query(
         """
         SELECT date, SUM(calories) AS calories, SUM(protein) AS protein, SUM(carbs) AS carbs,

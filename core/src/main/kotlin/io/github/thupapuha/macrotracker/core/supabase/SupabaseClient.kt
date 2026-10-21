@@ -75,6 +75,15 @@ class SupabaseClient(
         session
     }
 
+    /**
+     * Puts back a session saved in a backup (after reinstalling the app). If it is no longer
+     * valid, the next request falls back to a new anonymous user as usual.
+     */
+    suspend fun replaceSession(session: AuthSession) = mutex.withLock {
+        store.save(session)
+        cached = session
+    }
+
     suspend fun rpc(function: String, args: JsonObject = JsonObject(emptyMap())): String {
         val result = authorized {
             Request.Builder()
