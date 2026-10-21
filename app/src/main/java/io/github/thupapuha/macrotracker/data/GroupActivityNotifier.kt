@@ -22,9 +22,13 @@ import androidx.work.WorkerParameters
 import io.github.thupapuha.macrotracker.MacroTrackerApp
 import io.github.thupapuha.macrotracker.MainActivity
 import io.github.thupapuha.macrotracker.R
+import io.github.thupapuha.macrotracker.core.gym.Gym
 import io.github.thupapuha.macrotracker.core.supabase.ActivityComment
 import io.github.thupapuha.macrotracker.core.supabase.ActivityItem
+import io.github.thupapuha.macrotracker.core.supabase.ActivityReaction
+import io.github.thupapuha.macrotracker.core.supabase.ActivityWorkout
 import io.github.thupapuha.macrotracker.core.supabase.GroupApi
+import io.github.thupapuha.macrotracker.core.supabase.PostType
 import io.github.thupapuha.macrotracker.ui.common.dayLabel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
 import io.github.thupapuha.macrotracker.ui.common.macroLine
@@ -39,7 +43,7 @@ import java.time.format.DateTimeParseException
 import java.util.concurrent.TimeUnit
 
 /**
- * Tells you when friends log food or comment on yours. There is no push server: a periodic
+ * Tells you when friends log food or workouts, and when they comment on or react to your posts. There is no push server: a periodic
  * background job (every ~15 minutes, Android's minimum) polls `group_activity`.
  */
 class GroupActivityNotifier(
@@ -81,6 +85,8 @@ class GroupActivityNotifier(
         val activity = api.activity(seen.cursor?.let { minusSeconds(it, 30) })
         val days = seen.days.toMutableMap()
         val commentIds = seen.commentIds.toMutableList()
+        val workoutIds = seen.workoutIds.toMutableList()
+        val reactionKeys = seen.reactionKeys.toMutableList()
 
         for (item in activity.items) {
             val key = "${item.userId}|${item.day}"
@@ -95,6 +101,19 @@ class GroupActivityNotifier(
             notifyComment(comment)
             commentIds += comment.id
         }
+        for (workout in activity.workouts) {
+            if (workout.id in workoutIds) continue
+            notifyWorkout(workout)
+            workoutIds += workout.id
+        }
+        // Several reactions to the same post become one notification.
+        activity.reactions
+            .filter { reactionKey(it) !in reactionKeys }
+            .groupBy { "${it.groupId}|${it.postType}|${it.postId}" }
+            .forEach { (post, reactions) ->
+                notifyReactions(post, reactions)
+                reactions.forEach { reactionKeys += reactionKey(it) }
+            }
 
         val oldest = LocalDate.now().minusDays(4).toString()
         settings.setActivitySeen(
@@ -102,6 +121,8 @@ class GroupActivityNotifier(
                 cursor = activity.now,
                 days = days.filterKeys { it.substringAfter('|') >= oldest },
                 commentIds = commentIds.takeLast(200),
+                workoutIds = workoutIds.takeLast(200),
+                reactionKeys = reactionKeys.takeLast(300),
             ),
         )
     }
@@ -120,13 +141,54 @@ class GroupActivityNotifier(
 
     private fun notifyComment(comment: ActivityComment) {
         val about = comment.mealName?.let { "Sobre $it: " }.orEmpty()
+        val what = when (comment.postType) {
+            PostType.WORKOUT -> "tu entrenamiento"
+            PostType.WEIGHT -> "tu progreso de peso"
+            else -> "tu comida"
+        }
         post(
             "comment-${comment.id}".hashCode(),
             comment.groupId,
-            "${comment.authorName} comentó tu comida",
+            "${comment.authorName} comentó $what",
             about + comment.body,
             comment.groupName,
         )
+    }
+
+    private fun notifyWorkout(workout: ActivityWorkout) {
+        val records = workout.exercises.filter { it.pr }
+        val title = if (records.isNotEmpty()) {
+            "🏆 ${workout.displayName} rompió ${if (records.size == 1) "un récord" else "${records.size} récords"}"
+        } else {
+            "💪 ${workout.displayName} terminó de entrenar"
+        }
+        val text = if (records.isNotEmpty()) {
+            records.take(3).joinToString(", ") { exercise ->
+                val best = Gym.best(exercise.sets)
+                if (best == null) exercise.name else "${exercise.name} ${Gym.formatKg(best.weight)} kg × ${best.reps}"
+            }
+        } else {
+            "${workout.title}: " + workout.exercises.take(4).joinToString(", ") { it.name } +
+                if (workout.exercises.size > 4) "…" else ""
+        }
+        post("workout-${workout.id}".hashCode(), workout.groupId, title, text, workout.groupName)
+    }
+
+    private fun notifyReactions(post: String, reactions: List<ActivityReaction>) {
+        val first = reactions.first()
+        val names = reactions.map { it.authorName }.distinct()
+        val who = when (names.size) {
+            1 -> names[0]
+            2 -> "${names[0]} y ${names[1]}"
+            else -> "${names[0]} y ${names.size - 1} más"
+        }
+        val what = when (first.postType) {
+            PostType.WORKOUT -> "tu entrenamiento"
+            PostType.WEIGHT -> "tu progreso de peso"
+            else -> "tus comidas"
+        }
+        val emojis = reactions.map { it.emoji }.distinct().joinToString("")
+        post("reaction-$post".hashCode(), first.groupId, "$emojis $who reaccionó a $what", "Toca para ver la publicación", first.groupName)
     }
 
     @SuppressLint("MissingPermission")
@@ -141,7 +203,7 @@ class GroupActivityNotifier(
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
                 .setName("Actividad de tus grupos")
-                .setDescription("Cuando tus amigos registran comida o comentan la tuya")
+                .setDescription("Cuando tus amigos registran comida o entrenos, comentan o reaccionan")
                 .build(),
         )
         val intent = Intent(context, MainActivity::class.java)
@@ -183,6 +245,8 @@ class GroupActivityNotifier(
                 }
             }
         }
+
+        private fun reactionKey(r: ActivityReaction) = "${r.groupId}|${r.postType}|${r.postId}|${r.authorId}|${r.emoji}"
 
         private fun isAfter(a: String, b: String): Boolean = try {
             OffsetDateTime.parse(a).isAfter(OffsetDateTime.parse(b))

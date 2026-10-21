@@ -3,6 +3,7 @@ package io.github.thupapuha.macrotracker.core
 import io.github.thupapuha.macrotracker.core.model.Macros
 import io.github.thupapuha.macrotracker.core.supabase.AuthSession
 import io.github.thupapuha.macrotracker.core.supabase.GroupApi
+import io.github.thupapuha.macrotracker.core.supabase.PostType
 import io.github.thupapuha.macrotracker.core.supabase.SessionStore
 import io.github.thupapuha.macrotracker.core.supabase.SharedMeal
 import io.github.thupapuha.macrotracker.core.supabase.SupabaseClient
@@ -15,7 +16,9 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.LocalDate
@@ -108,6 +111,45 @@ class SupabaseClientTest {
         val request = server.takeRequest()
         assertEquals("/rest/v1/rpc/group_activity", request.path)
         assertEquals("""{"p_since":null}""", request.body.readUtf8())
+    }
+
+    @Test
+    fun parsesFeedPostsAndSkipsUnknownOnes() = runTest {
+        store.saved = AuthSession("a1", "r1", expiresAt = 5_000, userId = "user-1")
+        server.enqueue(
+            MockResponse().setBody(
+                """[
+                  {"post_type":"workout","post_id":"w1","user_id":"u2","day":"2026-10-21","at":"2026-10-21T20:00:00+00:00",
+                   "data":{"title":"Pierna","pr_count":1,"duration_min":55,
+                           "exercises":[{"name":"Sentadilla","sets":[{"reps":8,"weight":82.5}],"pr":true}]},
+                   "display_name":"Juan","reactions":{"💪":2,"🔥":1},"my_reaction":"💪","comment_count":3},
+                  {"post_type":"food","post_id":"2026-10-21","user_id":"u2","day":"2026-10-21","at":"2026-10-21T19:00:00+00:00",
+                   "data":{"calories":900,"protein":60,"carbs":90,"fat":30,"target_calories":2000,"target_protein":150,
+                           "target_carbs":200,"target_fat":60,"meals":[{"name":"Avena","calories":300,"meal":"BREAKFAST"}]},
+                   "display_name":"Juan","reactions":{},"my_reaction":null,"comment_count":0},
+                  {"post_type":"weight","post_id":"2026-10-21","user_id":"u3","day":"2026-10-21","at":"2026-10-21T08:00:00+00:00",
+                   "data":{"kg":80.4,"goal":75,"start":82,"previous":81.2},"display_name":"Ana","reactions":{},"comment_count":0},
+                  {"post_type":"story","post_id":"x","user_id":"u3","day":"2026-10-21","at":"2026-10-21T07:00:00+00:00",
+                   "data":{},"display_name":"Ana"}
+                ]""",
+            ),
+        )
+
+        val feed = GroupApi(client()).feed("g1")
+
+        assertEquals(listOf(PostType.WORKOUT, PostType.FOOD, PostType.WEIGHT), feed.map { it.type })
+        val workout = feed[0].workout!!
+        assertEquals(82.5, workout.exercises.single().sets.single().weight, 0.0)
+        assertTrue(workout.exercises.single().pr)
+        assertEquals(mapOf("💪" to 2, "🔥" to 1), feed[0].reactions)
+        assertEquals("💪", feed[0].myReaction)
+        assertEquals(2000.0, feed[1].food!!.targets!!.calories, 0.0)
+        assertNull(feed[1].myReaction)
+        assertEquals(81.2, feed[2].weight!!.previous!!, 0.0)
+        assertNotNull(feed[2].weight!!.goal)
+        val request = server.takeRequest()
+        assertEquals("/rest/v1/rpc/group_feed", request.path)
+        assertEquals("""{"p_group":"g1","p_before":null,"p_limit":30}""", request.body.readUtf8())
     }
 
     @Test

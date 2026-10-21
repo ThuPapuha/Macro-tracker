@@ -10,6 +10,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
+import io.github.thupapuha.macrotracker.core.gym.WeightGoal
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.net.AppJson
 import io.github.thupapuha.macrotracker.core.nutrition.ActivityLevel
@@ -27,6 +29,9 @@ import java.io.IOException
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
+// Saved on every set while training, so it lives apart from the settings everyone observes.
+private val Context.workoutDraftStore by preferencesDataStore(name = "active_workout")
+
 data class UserSettings(
     val targets: MacroTargets? = null,
     val displayName: String = "",
@@ -42,6 +47,20 @@ data class UserSettings(
     val notificationPermissionAsked: Boolean = false,
     /** Epoch millis of the last automatic backup to Downloads, 0 if never. */
     val lastBackupAt: Long = 0,
+    val weightGoal: WeightGoal? = null,
+    /** Show my weight and its goal to my groups. */
+    val shareWeight: Boolean = true,
+    val weightGoalSynced: Boolean = false,
+)
+
+/** A workout in progress, kept so closing the app at the gym does not lose it. */
+@Serializable
+data class ActiveWorkout(
+    val title: String,
+    val routineId: String? = null,
+    val date: String,
+    val startedAt: Long,
+    val exercises: List<ExerciseLog>,
 )
 
 /** Last friends' days and comments already notified, so each change is announced once. */
@@ -51,6 +70,9 @@ data class ActivitySeen(
     /** "userId|day" -> last updated_at and food names seen. */
     val days: Map<String, SeenDay> = emptyMap(),
     val commentIds: List<String> = emptyList(),
+    val workoutIds: List<String> = emptyList(),
+    /** "groupId|postType|postId|authorId|emoji" of reactions to my posts. */
+    val reactionKeys: List<String> = emptyList(),
 )
 
 @Serializable
@@ -58,6 +80,7 @@ data class SeenDay(val updatedAt: String, val foods: List<String>)
 
 class SettingsStore(context: Context) {
     private val store = context.applicationContext.dataStore
+    private val draftStore = context.applicationContext.workoutDraftStore
 
     private object Keys {
         val targetCalories = doublePreferencesKey("target_calories")
@@ -83,6 +106,11 @@ class SettingsStore(context: Context) {
         val notificationPermissionAsked = booleanPreferencesKey("notification_permission_asked")
         val activitySeen = stringPreferencesKey("activity_seen")
         val lastBackupAt = longPreferencesKey("last_backup_at")
+        val weightStart = doublePreferencesKey("weight_start")
+        val weightGoal = doublePreferencesKey("weight_goal")
+        val shareWeight = booleanPreferencesKey("share_weight")
+        val weightGoalSynced = booleanPreferencesKey("weight_goal_synced")
+        val activeWorkout = stringPreferencesKey("active_workout")
     }
 
     private val preferences: Flow<Preferences> = store.data.catch { e ->
@@ -111,6 +139,9 @@ class SettingsStore(context: Context) {
             notifyGroupActivity = p[Keys.notifyGroupActivity] ?: true,
             notificationPermissionAsked = p[Keys.notificationPermissionAsked] ?: false,
             lastBackupAt = p[Keys.lastBackupAt] ?: 0,
+            weightGoal = p[Keys.weightGoal]?.let { goal -> WeightGoal(start = p[Keys.weightStart] ?: goal, goal = goal) },
+            shareWeight = p[Keys.shareWeight] ?: true,
+            weightGoalSynced = p[Keys.weightGoalSynced] ?: false,
         )
     }
 
@@ -158,6 +189,48 @@ class SettingsStore(context: Context) {
 
     suspend fun setLastBackup(epochMillis: Long) {
         store.edit { it[Keys.lastBackupAt] = epochMillis }
+    }
+
+    suspend fun setWeightGoal(goal: WeightGoal?, share: Boolean) {
+        store.edit {
+            if (goal == null) {
+                it.remove(Keys.weightGoal)
+                it.remove(Keys.weightStart)
+            } else {
+                it[Keys.weightGoal] = goal.goal
+                it[Keys.weightStart] = goal.start
+            }
+            it[Keys.shareWeight] = share
+            it[Keys.weightGoalSynced] = false
+        }
+    }
+
+    /** Marks the weight goal as uploaded, unless it changed while uploading. */
+    suspend fun markWeightGoalSynced(uploaded: WeightGoal?, share: Boolean) {
+        store.edit {
+            val current = it[Keys.weightGoal]?.let { goal -> WeightGoal(it[Keys.weightStart] ?: goal, goal) }
+            if (current == uploaded && (it[Keys.shareWeight] ?: true) == share) it[Keys.weightGoalSynced] = true
+        }
+    }
+
+    suspend fun activeWorkout(): ActiveWorkout? = draftStore.data.catch { e ->
+        if (e is IOException) emit(emptyPreferences()) else throw e
+    }.first()[Keys.activeWorkout]?.let {
+        runCatching { AppJson.decodeFromString(ActiveWorkout.serializer(), it) }.getOrNull()
+    }
+
+    val hasActiveWorkout: Flow<Boolean> = draftStore.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[Keys.activeWorkout] != null }
+
+    suspend fun setActiveWorkout(workout: ActiveWorkout?) {
+        draftStore.edit {
+            if (workout == null) {
+                it.remove(Keys.activeWorkout)
+            } else {
+                it[Keys.activeWorkout] = AppJson.encodeToString(ActiveWorkout.serializer(), workout)
+            }
+        }
     }
 
     suspend fun setNotificationPermissionAsked() {

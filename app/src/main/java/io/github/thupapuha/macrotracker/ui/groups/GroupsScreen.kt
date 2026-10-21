@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -54,8 +55,10 @@ import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.SummarySync
 import io.github.thupapuha.macrotracker.data.UserSettings
 import io.github.thupapuha.macrotracker.ui.common.ErrorText
+import io.github.thupapuha.macrotracker.ui.common.GradientCard
 import io.github.thupapuha.macrotracker.ui.common.TextInputDialog
 import io.github.thupapuha.macrotracker.ui.common.appViewModel
+import io.github.thupapuha.macrotracker.ui.theme.Brand
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -299,6 +302,16 @@ private fun NoGroups(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            item {
+                GradientCard(Brand.hero) {
+                    Text("Ponte en forma con tus amigos", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                    Text(
+                        "🍽️ Mira cómo comen frente a sus objetivos\n🏋️ Comparte tus entrenos y récords\n⚖️ Sigue sus metas de peso\n💬 Comenta y reacciona a sus publicaciones",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                    )
+                }
+            }
             item {
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {

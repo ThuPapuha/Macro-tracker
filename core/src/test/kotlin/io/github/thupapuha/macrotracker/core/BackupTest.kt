@@ -2,11 +2,18 @@ package io.github.thupapuha.macrotracker.core
 
 import io.github.thupapuha.macrotracker.core.backup.BackupEntry
 import io.github.thupapuha.macrotracker.core.backup.BackupFile
+import io.github.thupapuha.macrotracker.core.backup.BackupRoutine
+import io.github.thupapuha.macrotracker.core.backup.BackupWeight
+import io.github.thupapuha.macrotracker.core.backup.BackupWorkout
 import io.github.thupapuha.macrotracker.core.backup.Backups
+import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
+import io.github.thupapuha.macrotracker.core.gym.WeightGoal
+import io.github.thupapuha.macrotracker.core.gym.WorkoutSet
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.supabase.AuthSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackupTest {
@@ -24,8 +31,24 @@ class BackupTest {
             lastGroupId = "g1",
             hadGroups = true,
             session = AuthSession("access", "refresh", 5_000, "user-1"),
+            routines = listOf(BackupRoutine("r1", "Pierna", listOf(ExerciseLog("Sentadilla", listOf(WorkoutSet(8, 80.0)))))),
+            workouts = listOf(
+                BackupWorkout("w1", "2026-10-21", "Pierna", "r1", listOf(ExerciseLog("Sentadilla", listOf(WorkoutSet(8, 82.5)), pr = true)), 1, 50, 9_000),
+            ),
+            weights = listOf(BackupWeight("2026-10-21", 80.4)),
+            weightGoal = WeightGoal(82.0, 75.0),
+            shareWeight = false,
         )
         assertEquals(file, Backups.decode(Backups.encode(file)))
+    }
+
+    @Test
+    fun readsFilesFromBeforeTheGym() {
+        val old = """{"app":"macro-tracker","format":1,"exportedAt":"2026-10-01T00:00:00Z","entries":[],"hadGroups":false}"""
+        val file = Backups.decode(old)
+        assertTrue(file.routines.isEmpty() && file.workouts.isEmpty() && file.weights.isEmpty())
+        assertEquals(null, file.weightGoal)
+        assertTrue(file.shareWeight)
     }
 
     @Test

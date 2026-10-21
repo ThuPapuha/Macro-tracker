@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,9 +53,11 @@ import io.github.thupapuha.macrotracker.core.model.Macros
 import io.github.thupapuha.macrotracker.core.model.MealType
 import io.github.thupapuha.macrotracker.data.FoodEntry
 import io.github.thupapuha.macrotracker.data.FoodRepository
+import io.github.thupapuha.macrotracker.data.ProgressRepository
 import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.macros
 import io.github.thupapuha.macrotracker.data.mealType
+import io.github.thupapuha.macrotracker.ui.common.Avatar
 import io.github.thupapuha.macrotracker.ui.common.FoodDraft
 import io.github.thupapuha.macrotracker.ui.common.FoodEditDialog
 import io.github.thupapuha.macrotracker.ui.common.MacroSummaryCard
@@ -62,6 +66,7 @@ import io.github.thupapuha.macrotracker.ui.common.appViewModel
 import io.github.thupapuha.macrotracker.ui.common.dayLabel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
 import io.github.thupapuha.macrotracker.ui.common.macroLine
+import io.github.thupapuha.macrotracker.ui.progress.WeightLogDialog
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -75,10 +80,44 @@ import java.time.LocalTime
 
 class TodayViewModel(
     private val repository: FoodRepository,
-    settings: SettingsStore,
+    private val progress: ProgressRepository,
+    private val settings: SettingsStore,
     initialDate: LocalDate,
 ) : ViewModel() {
     val date = MutableStateFlow(initialDate)
+
+    val displayName: StateFlow<String> = settings.settings
+        .map { it.displayName }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    /** Consecutive days with food logged, up to today (or yesterday if today is still empty). */
+    val streak: StateFlow<Int> = repository.observeTotals(LocalDate.now().minusDays(365), LocalDate.now())
+        .map { totals ->
+            val logged = totals.filter { it.entries > 0 }.mapTo(HashSet()) { it.date }
+            var day = LocalDate.now()
+            if (day.toString() !in logged) day = day.minusDays(1)
+            var count = 0
+            while (day.toString() in logged) {
+                count++
+                day = day.minusDays(1)
+            }
+            count
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** Same colors as in the groups: the avatar depends on the user id once there is one. */
+    var avatarSeed by mutableStateOf("")
+        private set
+
+    init {
+        viewModelScope.launch { avatarSeed = settings.sessionStore.load()?.userId.orEmpty() }
+    }
+
+    fun logWeight(day: LocalDate, kg: Double) {
+        viewModelScope.launch { progress.logWeight(day, kg) }
+    }
+
+    suspend fun lastWeight(): Double? = progress.latestWeight()?.kg
 
     val entries: StateFlow<List<FoodEntry>> = date
         .flatMapLatest { repository.observeDay(it) }
@@ -113,10 +152,16 @@ fun TodayScreen(
     onBack: (() -> Unit)?,
     onAddFood: (LocalDate, MealType) -> Unit,
     onOpenProfile: () -> Unit,
+    onTrain: () -> Unit = {},
 ) {
     val vm = appViewModel(key = "day-${initialDate ?: "today"}") {
-        TodayViewModel(it.foodRepository, it.settings, initialDate ?: LocalDate.now())
+        TodayViewModel(it.foodRepository, it.progressRepository, it.settings, initialDate ?: LocalDate.now())
     }
+    val name by vm.displayName.collectAsStateWithLifecycle()
+    val streak by vm.streak.collectAsStateWithLifecycle()
+    var loggingWeight by remember { mutableStateOf(false) }
+    var lastWeight by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(loggingWeight) { if (loggingWeight) lastWeight = vm.lastWeight() }
     val date by vm.date.collectAsStateWithLifecycle()
     val entries by vm.entries.collectAsStateWithLifecycle()
     val targets by vm.targets.collectAsStateWithLifecycle()
@@ -165,6 +210,36 @@ fun TodayScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (onBack == null) {
+                item(key = "hero") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                greeting() + if (name.isNotBlank()) ", ${name.substringBefore(' ')}" else "",
+                                style = MaterialTheme.typography.headlineSmall,
+                            )
+                            Text(
+                                if (streak > 0) "🔥 $streak ${if (streak == 1) "día" else "días"} seguidos registrando" else "Registra hoy y empieza tu racha 🔥",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Avatar(
+                            name.ifBlank { "Yo" },
+                            vm.avatarSeed.ifBlank { name },
+                            Modifier.clickable(onClick = onOpenProfile),
+                            diameter = 48.dp,
+                        )
+                    }
+                }
+                item(key = "actions") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        QuickAction("🍽️", "Comida", Modifier.weight(1f)) { onAddFood(date, MealType.forHour(LocalTime.now().hour)) }
+                        QuickAction("🏋️", "Entrenar", Modifier.weight(1f), onClick = onTrain)
+                        QuickAction("⚖️", "Peso", Modifier.weight(1f)) { loggingWeight = true }
+                    }
+                }
+            }
             if (onBack == null && updateState.showsBanner) {
                 item(key = "update") { UpdateBanner(updater, updateState) }
             }
@@ -200,6 +275,17 @@ fun TodayScreen(
         }
     }
 
+    if (loggingWeight) {
+        WeightLogDialog(
+            lastKg = lastWeight,
+            onDismiss = { loggingWeight = false },
+            onSave = { day, kg ->
+                vm.logWeight(day, kg)
+                loggingWeight = false
+            },
+        )
+    }
+
     editing?.let { entry ->
         FoodEditDialog(
             title = "Editar alimento",
@@ -216,6 +302,25 @@ fun TodayScreen(
                 editing = null
             },
         )
+    }
+}
+
+private fun greeting(): String = when (LocalTime.now().hour) {
+    in 5..11 -> "Buenos días"
+    in 12..19 -> "Buenas tardes"
+    else -> "Buenas noches"
+}
+
+@Composable
+private fun QuickAction(emoji: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    ElevatedCard(onClick = onClick, modifier = modifier) {
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(emoji, style = MaterialTheme.typography.headlineSmall)
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
