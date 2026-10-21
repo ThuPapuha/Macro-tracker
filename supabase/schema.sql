@@ -49,11 +49,26 @@ create table if not exists public.ai_usage (
   primary key (user_id, day)
 );
 
+create table if not exists public.meal_comments (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.groups (id) on delete cascade,
+  target_user uuid not null references auth.users (id) on delete cascade,
+  day date not null,
+  meal_name text,
+  author_id uuid not null references auth.users (id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists meal_comments_group_day_idx on public.meal_comments (group_id, day);
+create index if not exists meal_comments_target_idx on public.meal_comments (target_user, created_at);
+
 alter table public.profiles enable row level security;
 alter table public.groups enable row level security;
 alter table public.group_members enable row level security;
 alter table public.daily_summaries enable row level security;
 alter table public.ai_usage enable row level security;
+alter table public.meal_comments enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- Helpers (not callable by clients)
@@ -280,7 +295,121 @@ begin
     target_carbs = excluded.target_carbs,
     target_fat = excluded.target_fat,
     meals = excluded.meals,
-    updated_at = now();
+    -- updated_at drives friends' notifications, so it only moves when the food changed.
+    updated_at = case
+      when (s.calories, s.protein, s.carbs, s.fat, s.meals)
+        is distinct from (excluded.calories, excluded.protein, excluded.carbs, excluded.fat, excluded.meals)
+      then now()
+      else s.updated_at
+    end
+  where (s.calories, s.protein, s.carbs, s.fat, s.meals,
+         s.target_calories, s.target_protein, s.target_carbs, s.target_fat)
+    is distinct from (excluded.calories, excluded.protein, excluded.carbs, excluded.fat, excluded.meals,
+                      excluded.target_calories, excluded.target_protein, excluded.target_carbs, excluded.target_fat);
+end $$;
+
+create or replace function public.add_meal_comment(
+  p_group uuid, p_target uuid, p_day date, p_meal text, p_body text
+) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := public.require_member(p_group);
+  v_body text := left(btrim(coalesce(p_body, '')), 500);
+  v_meal text := nullif(left(btrim(coalesce(p_meal, '')), 120), '');
+  v_id uuid;
+begin
+  if v_body = '' then
+    raise exception 'El comentario está vacío';
+  end if;
+  if not exists (select 1 from group_members m where m.group_id = p_group and m.user_id = p_target) then
+    raise exception 'Esa persona ya no está en el grupo';
+  end if;
+  if (select count(*) from meal_comments c where c.author_id = uid and c.created_at > now() - interval '1 day') >= 300 then
+    raise exception 'Llegaste al límite de comentarios por hoy';
+  end if;
+  insert into meal_comments (group_id, target_user, day, meal_name, author_id, body)
+  values (p_group, p_target, p_day, v_meal, uid, v_body)
+  returning id into v_id;
+  return json_build_object('id', v_id);
+end $$;
+
+create or replace function public.delete_meal_comment(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := public.require_uid();
+begin
+  delete from meal_comments c where c.id = p_id and c.author_id = uid;
+end $$;
+
+create or replace function public.group_comments(p_group uuid, p_from date, p_to date)
+returns table (
+  id uuid,
+  target_user uuid,
+  day date,
+  meal_name text,
+  author_id uuid,
+  author_name text,
+  body text,
+  created_at timestamptz
+)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public.require_member(p_group);
+  if p_to < p_from or p_to - p_from > 62 then
+    raise exception 'Rango de fechas inválido';
+  end if;
+  return query
+    select c.id, c.target_user, c.day, c.meal_name, c.author_id,
+           coalesce(p.display_name, 'Anónimo'), c.body, c.created_at
+    from meal_comments c
+    left join profiles p on p.id = c.author_id
+    where c.group_id = p_group and c.day between p_from and p_to
+    order by c.created_at;
+end $$;
+
+-- Polled by the app in the background: friends' food changes and comments on my food since p_since.
+-- With p_since null it only returns the server time, to start the cursor without old notifications.
+create or replace function public.group_activity(p_since timestamptz) returns json
+language plpgsql stable security definer set search_path = public as $$
+declare
+  uid uuid := public.require_uid();
+begin
+  if p_since is null then
+    return json_build_object('now', now(), 'items', '[]'::json, 'comments', '[]'::json);
+  end if;
+  return json_build_object(
+    'now', now(),
+    'items', coalesce((
+      select json_agg(x order by x.updated_at) from (
+        select distinct on (s.user_id, s.day)
+          s.user_id, coalesce(p.display_name, 'Anónimo') as display_name,
+          m.group_id, g.name as group_name,
+          s.day, s.calories, s.protein, s.carbs, s.fat, s.meals, s.updated_at
+        from daily_summaries s
+        join group_members m on m.user_id = s.user_id
+        join group_members mine on mine.group_id = m.group_id and mine.user_id = uid
+        join groups g on g.id = m.group_id
+        left join profiles p on p.id = s.user_id
+        where s.updated_at > p_since
+          and s.user_id <> uid
+          and s.day >= current_date - 2
+          and (s.calories > 0 or jsonb_array_length(s.meals) > 0)
+        order by s.user_id, s.day, m.joined_at
+      ) x
+    ), '[]'::json),
+    'comments', coalesce((
+      select json_agg(y order by y.created_at) from (
+        select c.id, c.group_id, g.name as group_name, c.day, c.meal_name, c.body, c.created_at,
+               coalesce(p.display_name, 'Anónimo') as author_name
+        from meal_comments c
+        join groups g on g.id = c.group_id
+        left join profiles p on p.id = c.author_id
+        where c.target_user = uid and c.author_id <> uid and c.created_at > p_since
+        order by c.created_at
+        limit 50
+      ) y
+    ), '[]'::json)
+  );
 end $$;
 
 -- Called by the `gemini` Edge Function with the user's JWT: counts AI requests per day.
@@ -317,6 +446,10 @@ revoke all on function public.upsert_daily_summary(
   double precision, double precision, double precision, double precision, jsonb
 ) from public, anon;
 revoke all on function public.bump_ai_usage() from public, anon;
+revoke all on function public.add_meal_comment(uuid, uuid, date, text, text) from public, anon;
+revoke all on function public.delete_meal_comment(uuid) from public, anon;
+revoke all on function public.group_comments(uuid, date, date) from public, anon;
+revoke all on function public.group_activity(timestamptz) from public, anon;
 
 grant execute on function public.set_profile(text) to authenticated;
 grant execute on function public.create_group(text) to authenticated;
@@ -330,5 +463,9 @@ grant execute on function public.upsert_daily_summary(
   double precision, double precision, double precision, double precision, jsonb
 ) to authenticated;
 grant execute on function public.bump_ai_usage() to authenticated;
+grant execute on function public.add_meal_comment(uuid, uuid, date, text, text) to authenticated;
+grant execute on function public.delete_meal_comment(uuid) to authenticated;
+grant execute on function public.group_comments(uuid, date, date) to authenticated;
+grant execute on function public.group_activity(timestamptz) to authenticated;
 
 notify pgrst, 'reload schema';

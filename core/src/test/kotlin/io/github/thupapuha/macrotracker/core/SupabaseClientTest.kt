@@ -85,6 +85,32 @@ class SupabaseClientTest {
     }
 
     @Test
+    fun parsesActivityFeed() = runTest {
+        store.saved = AuthSession("a1", "r1", expiresAt = 5_000, userId = "user-1")
+        server.enqueue(
+            MockResponse().setBody(
+                """{"now":"2026-10-21T05:00:00.123+00:00",
+                  "items":[{"user_id":"u2","display_name":"Ana","group_id":"g1","group_name":"Gym","day":"2026-10-21",
+                            "calories":500,"protein":30,"carbs":50,"fat":20,
+                            "meals":[{"name":"Avena","calories":300,"meal":"BREAKFAST"}],
+                            "updated_at":"2026-10-21T04:59:00+00:00"}],
+                  "comments":[{"id":"c1","group_id":"g1","group_name":"Gym","day":"2026-10-21","meal_name":null,
+                               "body":"¡Bien!","created_at":"2026-10-21T04:58:00+00:00","author_name":"Ana"}]}""",
+            ),
+        )
+
+        val activity = GroupApi(client()).activity(since = null)
+
+        assertEquals("2026-10-21T05:00:00.123+00:00", activity.now)
+        assertEquals("Avena", activity.items.single().meals.single().name)
+        assertEquals(500.0, activity.items.single().totals.calories, 0.0)
+        assertNull(activity.comments.single().mealName)
+        val request = server.takeRequest()
+        assertEquals("/rest/v1/rpc/group_activity", request.path)
+        assertEquals("""{"p_since":null}""", request.body.readUtf8())
+    }
+
+    @Test
     fun summaryArgsIncludeMealsAndNullTargets() {
         val args = GroupApi.summaryArgs(
             LocalDate.of(2026, 10, 19),

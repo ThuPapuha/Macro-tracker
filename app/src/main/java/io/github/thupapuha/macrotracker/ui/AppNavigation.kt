@@ -15,22 +15,26 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import io.github.thupapuha.macrotracker.MacroTrackerApp
 import io.github.thupapuha.macrotracker.core.model.MealType
 import io.github.thupapuha.macrotracker.ui.add.AddFoodScreen
-import io.github.thupapuha.macrotracker.ui.groups.GroupDetailScreen
 import io.github.thupapuha.macrotracker.ui.groups.GroupsScreen
 import io.github.thupapuha.macrotracker.ui.history.HistoryScreen
 import io.github.thupapuha.macrotracker.ui.profile.ProfileScreen
 import io.github.thupapuha.macrotracker.ui.today.TodayScreen
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -46,8 +50,20 @@ private fun NavHostController.openAddFood(date: LocalDate, meal: MealType) = nav
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AppNavigation() {
+fun AppNavigation(openGroupRequests: MutableStateFlow<String?>) {
     val nav = rememberNavController()
+    val settings = (LocalContext.current.applicationContext as MacroTrackerApp).container.settings
+    val openGroup by openGroupRequests.collectAsStateWithLifecycle()
+    LaunchedEffect(openGroup) {
+        val groupId = openGroup ?: return@LaunchedEffect
+        settings.setLastGroup(groupId)
+        nav.navigate("groups") {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+        openGroupRequests.value = null
+    }
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val showBottomBar = tabs.any { it.route == route }
@@ -106,13 +122,7 @@ fun AppNavigation() {
                 HistoryScreen(onOpenDay = { nav.navigate("day/$it") })
             }
             composable("groups") {
-                GroupsScreen(onOpenGroup = { nav.navigate("group/$it") })
-            }
-            composable("group/{id}") { entry ->
-                GroupDetailScreen(
-                    groupId = entry.arguments?.getString("id").orEmpty(),
-                    onBack = { nav.popBackStack() },
-                )
+                GroupsScreen()
             }
             composable("profile") {
                 ProfileScreen()
