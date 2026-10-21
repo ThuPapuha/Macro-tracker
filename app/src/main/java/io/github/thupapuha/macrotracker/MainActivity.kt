@@ -35,6 +35,11 @@ class MainActivity : ComponentActivity() {
         (application as MacroTrackerApp).container.updater.checkIfDue()
     }
 
+    override fun onStop() {
+        super.onStop()
+        (application as MacroTrackerApp).container.backup.backupIfChanged()
+    }
+
     private fun handleIntent(intent: Intent?) {
         val groupId = intent?.getStringExtra(GroupActivityNotifier.EXTRA_OPEN_GROUP) ?: return
         // Remove it so a configuration change does not navigate again.

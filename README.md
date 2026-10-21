@@ -68,9 +68,18 @@ Cada push a `main` repite el proceso y publica una versión nueva.
 
 Las versiones nuevas se instalan encima de la anterior sin perder datos, porque todas se firman con la misma llave (`app/signing/macrotracker.jks`).
 
+### Respaldo de tus datos
+
+Tus comidas se guardan en el teléfono. Para no perderlas:
+
+- **Nunca desinstales para actualizar.** Instalar una versión nueva encima de la anterior conserva los datos, porque todas las versiones están firmadas con la misma llave. Desinstalar sí los borra.
+- Cada vez que sales de la app (y antes de instalar una actualización) se guarda una copia en **Descargas › MacroTracker › macrotracker-respaldo.json** (Android 10 o superior). Ese archivo se conserva aunque desinstales la app.
+- Si reinstalas, ve a **Perfil › Respaldo › Importar** y elige ese archivo. Se recuperan tus comidas, tus objetivos y, si estabas en grupos, tu mismo usuario de grupos. No compartas ese archivo: permite entrar a tus grupos como tú.
+- También puedes exportar un respaldo a mano desde el mismo lugar.
+
 ### Actualizaciones
 
-La app revisa las Releases de este repositorio al abrirse (como máximo cada 6 horas). Si hay una versión nueva, muestra un aviso con el botón **Actualizar**: la descarga y abre el instalador de Android, que siempre pide confirmar. La primera vez, Android te pide permitir que Macro Tracker instale apps. También puedes buscar a mano en *Perfil → Buscar actualización*.
+La app revisa las Releases de este repositorio al abrirse (como máximo cada 6 horas), usando el archivo `version.json` que se publica con cada versión. Si hay una versión nueva, muestra un aviso con el botón **Actualizar**: la descarga y abre el instalador de Android, que siempre pide confirmar. La primera vez, Android te pide permitir que Macro Tracker instale apps. También puedes buscar a mano en *Perfil → Buscar actualización*.
 
 ## Notas
 

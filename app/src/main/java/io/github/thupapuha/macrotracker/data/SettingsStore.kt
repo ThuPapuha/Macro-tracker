@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
@@ -39,6 +40,8 @@ data class UserSettings(
     val lastGroupId: String = "",
     val notifyGroupActivity: Boolean = true,
     val notificationPermissionAsked: Boolean = false,
+    /** Epoch millis of the last automatic backup to Downloads, 0 if never. */
+    val lastBackupAt: Long = 0,
 )
 
 /** Last friends' days and comments already notified, so each change is announced once. */
@@ -79,6 +82,7 @@ class SettingsStore(context: Context) {
         val notifyGroupActivity = booleanPreferencesKey("notify_group_activity")
         val notificationPermissionAsked = booleanPreferencesKey("notification_permission_asked")
         val activitySeen = stringPreferencesKey("activity_seen")
+        val lastBackupAt = longPreferencesKey("last_backup_at")
     }
 
     private val preferences: Flow<Preferences> = store.data.catch { e ->
@@ -106,6 +110,7 @@ class SettingsStore(context: Context) {
             lastGroupId = p[Keys.lastGroupId].orEmpty(),
             notifyGroupActivity = p[Keys.notifyGroupActivity] ?: true,
             notificationPermissionAsked = p[Keys.notificationPermissionAsked] ?: false,
+            lastBackupAt = p[Keys.lastBackupAt] ?: 0,
         )
     }
 
@@ -149,6 +154,10 @@ class SettingsStore(context: Context) {
 
     suspend fun setNotifyGroupActivity(value: Boolean) {
         store.edit { it[Keys.notifyGroupActivity] = value }
+    }
+
+    suspend fun setLastBackup(epochMillis: Long) {
+        store.edit { it[Keys.lastBackupAt] = epochMillis }
     }
 
     suspend fun setNotificationPermissionAsked() {

@@ -66,6 +66,7 @@ import io.github.thupapuha.macrotracker.core.nutrition.BodyProfile
 import io.github.thupapuha.macrotracker.core.nutrition.Goal
 import io.github.thupapuha.macrotracker.core.nutrition.NutritionCalculator
 import io.github.thupapuha.macrotracker.core.nutrition.Sex
+import io.github.thupapuha.macrotracker.data.BackupManager
 import io.github.thupapuha.macrotracker.data.MediaReader
 import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.UpdateState
@@ -82,6 +83,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private val documentTypes = arrayOf(
@@ -95,8 +101,42 @@ class ProfileViewModel(
     private val settings: SettingsStore,
     private val ai: AiService,
     private val media: MediaReader,
+    private val backup: BackupManager,
     val serverConfigured: Boolean,
 ) : ViewModel() {
+    val autoBackupSupported = backup.autoBackupSupported
+
+    var backupMessage by mutableStateOf<String?>(null)
+        private set
+
+    fun exportBackup(uri: Uri) = runBackup {
+        backup.exportTo(uri)
+        "Respaldo guardado."
+    }
+
+    fun importBackup(uri: Uri) = runBackup {
+        val result = backup.importFrom(uri)
+        buildString {
+            append(if (result.added == 1) "Se importó 1 alimento" else "Se importaron ${result.added} alimentos")
+            if (result.alreadyPresent > 0) append(" (${result.alreadyPresent} ya estaban)")
+            append(".")
+            if (result.restoredGroups) append(" Recuperaste tu usuario de grupos.")
+        }
+    }
+
+    private fun runBackup(action: suspend () -> String) {
+        viewModelScope.launch {
+            backupMessage = "Procesando…"
+            backupMessage = try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.message ?: "No se pudo completar el respaldo"
+            }
+        }
+    }
+
     val state: StateFlow<UserSettings?> = settings.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -158,13 +198,19 @@ class ProfileViewModel(
 
 @Composable
 fun ProfileScreen() {
-    val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.serverConfigured) }
+    val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.backup, it.serverConfigured) }
     val state by vm.state.collectAsStateWithLifecycle()
     val updater = (LocalContext.current.applicationContext as MacroTrackerApp).container.updater
     val updateState by updater.state.collectAsStateWithLifecycle()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     var documentNote by rememberSaveable { mutableStateOf("") }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val exportBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) vm.exportBackup(uri)
+    }
+    val importBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importBackup(uri)
+    }
     val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.analyzeDocument(uri, documentNote)
     }
@@ -179,7 +225,6 @@ fun ProfileScreen() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            UpdateBanner(updater, updateState)
             TargetsCard(
                 targets = settings.targets,
                 onUpload = { dialog = "document" },
@@ -267,8 +312,18 @@ fun ProfileScreen() {
                             TextButton(onClick = { updater.check(manual = true) }) { Text("Buscar actualización") }
                         }
                     }
+                    // Shown right under the button so the result of a manual check is visible.
+                    UpdateBanner(updater, updateState)
                 }
             }
+
+            BackupCard(
+                autoSupported = vm.autoBackupSupported,
+                lastBackupAt = settings.lastBackupAt,
+                message = vm.backupMessage,
+                onExport = { exportBackup.launch("macrotracker-respaldo-${LocalDate.now()}.json") },
+                onImport = { importBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*")) },
+            )
         }
     }
 
@@ -321,6 +376,44 @@ fun ProfileScreen() {
                 dialog = null
             },
         )
+    }
+}
+
+private val backupTimeFormat = DateTimeFormatter.ofPattern("d MMM, HH:mm", Locale.forLanguageTag("es"))
+
+@Composable
+private fun BackupCard(
+    autoSupported: Boolean,
+    lastBackupAt: Long,
+    message: String?,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
+) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Respaldo de tus datos", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (autoSupported) {
+                    "Tus comidas se guardan en este teléfono. Cada vez que sales de la app (y antes de " +
+                        "actualizarla) se guarda una copia en Descargas › MacroTracker, que se conserva " +
+                        "aunque desinstales. Si reinstalas, impórtala aquí."
+                } else {
+                    "Tus comidas se guardan en este teléfono. Exporta un respaldo de vez en cuando; " +
+                        "si reinstalas la app, impórtalo aquí."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (autoSupported && lastBackupAt > 0) {
+                val time = Instant.ofEpochMilli(lastBackupAt).atZone(ZoneId.systemDefault()).format(backupTimeFormat)
+                Text("Última copia automática: $time", style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) { Text("Exportar") }
+                OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f)) { Text("Importar") }
+            }
+            message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        }
     }
 }
 
