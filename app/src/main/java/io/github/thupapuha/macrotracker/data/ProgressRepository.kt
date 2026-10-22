@@ -1,6 +1,7 @@
 package io.github.thupapuha.macrotracker.data
 
 import io.github.thupapuha.macrotracker.core.backup.BackupRoutine
+import io.github.thupapuha.macrotracker.core.backup.BackupSection
 import io.github.thupapuha.macrotracker.core.backup.BackupWeight
 import io.github.thupapuha.macrotracker.core.backup.BackupWorkout
 import io.github.thupapuha.macrotracker.core.gym.BodyLog
@@ -15,11 +16,15 @@ import kotlinx.serialization.builtins.ListSerializer
 import java.time.LocalDate
 import java.util.UUID
 
+/** A user-made group of routines, like "Hipertrofia" or "Fuerza". */
+data class Section(val id: String, val name: String, val position: Int = 0)
+
 data class Routine(
     val id: String,
     val name: String,
     val exercises: List<ExerciseLog>,
     val position: Int = 0,
+    val sectionId: String? = null,
 )
 
 data class Workout(
@@ -31,6 +36,8 @@ data class Workout(
     val prCount: Int,
     val durationMin: Int?,
     val finishedAt: Long,
+    /** Section of the routine when it was done. */
+    val section: String? = null,
 )
 
 /** A day's weigh-in; body fat and muscle in %, bone mass in kg, when measured. */
@@ -53,7 +60,9 @@ fun encodeExercises(exercises: List<ExerciseLog>): String = AppJson.encodeToStri
 fun decodeExercises(json: String): List<ExerciseLog> =
     runCatching { AppJson.decodeFromString(exercisesSerializer, json) }.getOrDefault(emptyList())
 
-private fun RoutineEntity.toRoutine() = Routine(id, name, decodeExercises(exercisesJson), position)
+private fun RoutineEntity.toRoutine() = Routine(id, name, decodeExercises(exercisesJson), position, sectionId)
+
+private fun SectionEntity.toSection() = Section(id, name, position)
 
 private fun WorkoutEntity.toWorkout() = Workout(
     id = id,
@@ -64,6 +73,7 @@ private fun WorkoutEntity.toWorkout() = Workout(
     prCount = prCount,
     durationMin = durationMin,
     finishedAt = finishedAt,
+    section = section,
 )
 
 class ProgressRepository(private val dao: ProgressDao) {
@@ -72,6 +82,8 @@ class ProgressRepository(private val dao: ProgressDao) {
 
     /** Emits after workouts, weights or routines change (for syncing and backups). */
     val changed: SharedFlow<Unit> = changes
+
+    val sections: Flow<List<Section>> = dao.observeSections().map { list -> list.map { it.toSection() } }
 
     val routines: Flow<List<Routine>> = dao.observeRoutines().map { list -> list.map { it.toRoutine() } }
 
@@ -83,13 +95,38 @@ class ProgressRepository(private val dao: ProgressDao) {
 
     suspend fun routine(id: String): Routine? = dao.routine(id)?.toRoutine()
 
+    suspend fun sectionName(id: String?): String? = id?.let { dao.section(it) }?.name
+
+    /** Creates a section, or renames it when [id] is given. Returns its id. */
+    suspend fun saveSection(name: String, id: String? = null): String {
+        val existing = id?.let { dao.section(it) }
+        val section = existing?.copy(name = name.trim())
+            ?: SectionEntity(UUID.randomUUID().toString(), name.trim(), dao.allSections().size)
+        dao.upsertSection(section)
+        changes.emit(Unit)
+        return section.id
+    }
+
+    /** Deletes a section; its routines stay, without a section. */
+    suspend fun deleteSection(id: String) {
+        dao.clearSection(id)
+        dao.deleteSection(id)
+        changes.emit(Unit)
+    }
+
     /** Exercises of every saved workout, oldest first (to find personal records). */
     suspend fun history(): List<List<ExerciseLog>> = dao.allWorkouts().map { decodeExercises(it.exercisesJson) }
 
     suspend fun saveRoutine(routine: Routine) {
         val position = if (dao.routine(routine.id) == null) dao.allRoutines().size else routine.position
         dao.upsertRoutine(
-            RoutineEntity(routine.id, routine.name.trim(), encodeExercises(routine.exercises), position),
+            RoutineEntity(
+                id = routine.id,
+                name = routine.name.trim(),
+                exercisesJson = encodeExercises(routine.exercises),
+                position = position,
+                sectionId = routine.sectionId,
+            ),
         )
         changes.emit(Unit)
     }
@@ -110,6 +147,7 @@ class ProgressRepository(private val dao: ProgressDao) {
         exercises: List<ExerciseLog>,
         date: LocalDate,
         startedAt: Long,
+        section: String? = null,
     ): Workout? {
         val history = dao.allWorkouts().map { decodeExercises(it.exercisesJson) }
         val finished = Gym.finish(exercises, history)
@@ -126,6 +164,7 @@ class ProgressRepository(private val dao: ProgressDao) {
             durationMin = minutes,
             finishedAt = now,
             updatedAt = now,
+            section = section?.trim()?.ifBlank { null },
         )
         dao.upsertWorkout(entity)
         routineId?.let { dao.routine(it) }?.let { routine ->
@@ -170,11 +209,16 @@ class ProgressRepository(private val dao: ProgressDao) {
 
     // Backups.
 
-    suspend fun backupRoutines(): List<BackupRoutine> =
-        dao.allRoutines().map { BackupRoutine(it.id, it.name, decodeExercises(it.exercisesJson), it.position) }
+    suspend fun backupSections(): List<BackupSection> = dao.allSections().map { BackupSection(it.id, it.name, it.position) }
+
+    suspend fun backupRoutines(): List<BackupRoutine> = dao.allRoutines().map {
+        BackupRoutine(it.id, it.name, decodeExercises(it.exercisesJson), it.position, it.sectionId)
+    }
 
     suspend fun backupWorkouts(): List<BackupWorkout> = dao.allWorkouts().map {
-        BackupWorkout(it.id, it.date, it.title, it.routineId, decodeExercises(it.exercisesJson), it.prCount, it.durationMin, it.finishedAt)
+        BackupWorkout(
+            it.id, it.date, it.title, it.routineId, decodeExercises(it.exercisesJson), it.prCount, it.durationMin, it.finishedAt, it.section,
+        )
     }
 
     suspend fun backupWeights(): List<BackupWeight> =
@@ -182,13 +226,21 @@ class ProgressRepository(private val dao: ProgressDao) {
 
     /** Adds what is missing; returns how many workouts and weigh-ins were added. */
     suspend fun importBackup(
+        sections: List<BackupSection>,
         routines: List<BackupRoutine>,
         workouts: List<BackupWorkout>,
         weights: List<BackupWeight>,
     ): Pair<Int, Int> {
+        for (section in sections) {
+            if (dao.section(section.id) == null) dao.upsertSection(SectionEntity(section.id, section.name, section.position))
+        }
         for (routine in routines) {
             if (dao.routine(routine.id) == null) {
-                dao.upsertRoutine(RoutineEntity(routine.id, routine.name, encodeExercises(routine.exercises), routine.position))
+                // A routine whose section is not in the file ends up without a section.
+                val sectionId = routine.sectionId?.takeIf { dao.section(it) != null }
+                dao.upsertRoutine(
+                    RoutineEntity(routine.id, routine.name, encodeExercises(routine.exercises), routine.position, sectionId = sectionId),
+                )
             }
         }
         var addedWorkouts = 0
@@ -204,6 +256,7 @@ class ProgressRepository(private val dao: ProgressDao) {
                     prCount = workout.prCount,
                     durationMin = workout.durationMin,
                     finishedAt = workout.finishedAt,
+                    section = workout.section,
                 ),
             )
             addedWorkouts++
@@ -211,7 +264,7 @@ class ProgressRepository(private val dao: ProgressDao) {
         val knownDays = dao.allWeights().mapTo(HashSet()) { it.date }
         val newWeights = weights.filter { knownDays.add(it.date) }
         newWeights.forEach { dao.upsertWeight(WeightEntity(it.date, it.kg, it.fatPercent, it.musclePercent, it.boneKg)) }
-        if (routines.isNotEmpty() || addedWorkouts > 0 || newWeights.isNotEmpty()) changes.emit(Unit)
+        if (sections.isNotEmpty() || routines.isNotEmpty() || addedWorkouts > 0 || newWeights.isNotEmpty()) changes.emit(Unit)
         return addedWorkouts to newWeights.size
     }
 }

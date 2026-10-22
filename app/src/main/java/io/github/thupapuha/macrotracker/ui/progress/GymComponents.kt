@@ -25,6 +25,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import io.github.thupapuha.macrotracker.core.gym.BestLift
 import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
 import io.github.thupapuha.macrotracker.core.gym.Gym
+import io.github.thupapuha.macrotracker.core.gym.LoadUnit
 import io.github.thupapuha.macrotracker.core.gym.WorkoutSet
 import io.github.thupapuha.macrotracker.ui.common.NumberField
 import io.github.thupapuha.macrotracker.ui.common.Pill
@@ -75,15 +77,20 @@ data class EditableSet(val reps: String = "", val weight: String = "", val done:
     }
 }
 
-data class EditableExercise(val key: Long, val name: String, val sets: List<EditableSet>) {
-    fun toLog() = ExerciseLog(name = name.trim(), sets = sets.map { it.toSet() })
+data class EditableExercise(
+    val key: Long,
+    val name: String,
+    val sets: List<EditableSet>,
+    val unit: LoadUnit = LoadUnit.KG,
+) {
+    fun toLog() = ExerciseLog(name = name.trim(), sets = sets.map { it.toSet() }, unit = unit)
 
     companion object {
         private var nextKey = 0L
 
         fun newKey(): Long = ++nextKey
 
-        fun from(log: ExerciseLog) = EditableExercise(newKey(), log.name, log.sets.map(EditableSet::from))
+        fun from(log: ExerciseLog) = EditableExercise(newKey(), log.name, log.sets.map(EditableSet::from), log.unit)
 
         fun empty(name: String) = EditableExercise(newKey(), name, List(3) { EditableSet(reps = "10") })
     }
@@ -121,7 +128,7 @@ fun ExerciseCard(
                         Text(exercise.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (record != null) {
                             Text(
-                                "Récord: ${liftLabel(record)}",
+                                "Récord: ${liftLabel(record, exercise.unit)}",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -139,10 +146,28 @@ fun ExerciseCard(
                 }
                 IconButton(onClick = onRemove) { Icon(Icons.Filled.Delete, contentDescription = "Quitar ejercicio") }
             }
+            // Machines are often counted in plates instead of kilos.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Carga en", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FilterChip(
+                    selected = exercise.unit == LoadUnit.KG,
+                    onClick = { onChange(exercise.copy(unit = LoadUnit.KG)) },
+                    label = { Text("Kg") },
+                )
+                FilterChip(
+                    selected = exercise.unit == LoadUnit.PLATES,
+                    onClick = { onChange(exercise.copy(unit = LoadUnit.PLATES)) },
+                    label = { Text("Discos") },
+                )
+            }
             Row(Modifier.fillMaxWidth().padding(end = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Serie", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(44.dp))
                 Text("Repes", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                Text("Peso (kg)", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                Text(
+                    if (exercise.unit == LoadUnit.PLATES) "Discos" else "Peso (kg)",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.weight(1f),
+                )
             }
             exercise.sets.forEachIndexed { index, set ->
                 val isRecord = training && set.done && Gym.isRecord(Gym.best(listOf(set.toSet())), record)
@@ -227,8 +252,8 @@ fun AddExerciseDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
     )
 }
 
-fun liftLabel(lift: BestLift): String =
-    if (lift.weight > 0) "${Gym.formatKg(lift.weight)} kg × ${lift.reps}" else "${lift.reps} repes"
+fun liftLabel(lift: BestLift, unit: LoadUnit = LoadUnit.KG): String =
+    if (lift.weight > 0) "${unit.format(lift.weight)} × ${lift.reps}" else "${lift.reps} repes"
 
 /** "⏱ 55 min · 12 series · 4.520 kg" chips for a finished workout. */
 @Composable
@@ -262,7 +287,7 @@ fun ExerciseLines(exercises: List<ExerciseLog>, modifier: Modifier = Modifier, l
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    Gym.describe(exercise.sets),
+                    Gym.describe(exercise.sets, exercise.unit),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

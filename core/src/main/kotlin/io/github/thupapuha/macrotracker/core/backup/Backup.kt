@@ -22,12 +22,17 @@ data class BackupEntry(
     val createdAt: Long = 0,
 )
 
+/** A group of routines the user created, like "Hipertrofia" or "Fuerza". */
+@Serializable
+data class BackupSection(val id: String, val name: String, val position: Int = 0)
+
 @Serializable
 data class BackupRoutine(
     val id: String,
     val name: String,
     val exercises: List<ExerciseLog> = emptyList(),
     val position: Int = 0,
+    val sectionId: String? = null,
 )
 
 @Serializable
@@ -40,6 +45,7 @@ data class BackupWorkout(
     val prCount: Int = 0,
     val durationMin: Int? = null,
     val finishedAt: Long = 0,
+    val section: String? = null,
 )
 
 @Serializable
@@ -67,6 +73,7 @@ data class BackupFile(
     val hadGroups: Boolean = false,
     val session: AuthSession? = null,
     // Added in format 2; older files simply have none.
+    val sections: List<BackupSection> = emptyList(),
     val routines: List<BackupRoutine> = emptyList(),
     val workouts: List<BackupWorkout> = emptyList(),
     val weights: List<BackupWeight> = emptyList(),

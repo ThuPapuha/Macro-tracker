@@ -88,6 +88,7 @@ class ProgressSync(
                                 prCount = workout.prCount,
                                 durationMin = workout.durationMin,
                                 performedAt = Instant.ofEpochMilli(workout.finishedAt).atOffset(ZoneOffset.UTC).toString(),
+                                category = workout.section,
                             )
                         }
                     }

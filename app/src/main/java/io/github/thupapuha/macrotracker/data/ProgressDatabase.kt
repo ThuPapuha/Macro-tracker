@@ -14,6 +14,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
+/** A section the user groups routines in, like "Hipertrofia" or "Fuerza". */
+@Entity(tableName = "routine_sections")
+data class SectionEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val position: Int = 0,
+)
+
 /** A routine and its current target sets, as a JSON list of `ExerciseLog`. */
 @Entity(tableName = "routines")
 data class RoutineEntity(
@@ -22,6 +30,8 @@ data class RoutineEntity(
     val exercisesJson: String,
     val position: Int = 0,
     val updatedAt: Long = System.currentTimeMillis(),
+    /** [SectionEntity.id], or null when it is in no section. */
+    val sectionId: String? = null,
 )
 
 /** A finished workout. [synced]/[deleted] track what still has to reach the groups' server. */
@@ -39,6 +49,8 @@ data class WorkoutEntity(
     val updatedAt: Long = System.currentTimeMillis(),
     val synced: Boolean = false,
     val deleted: Boolean = false,
+    /** Name of the routine's section when it was done. */
+    val section: String? = null,
 )
 
 /** One weigh-in per day, in kg, with the body composition if it was measured. */
@@ -56,6 +68,25 @@ data class WeightEntity(
 
 @Dao
 interface ProgressDao {
+    @Query("SELECT * FROM routine_sections ORDER BY position, name")
+    fun observeSections(): Flow<List<SectionEntity>>
+
+    @Query("SELECT * FROM routine_sections ORDER BY position, name")
+    suspend fun allSections(): List<SectionEntity>
+
+    @Query("SELECT * FROM routine_sections WHERE id = :id")
+    suspend fun section(id: String): SectionEntity?
+
+    @Upsert
+    suspend fun upsertSection(section: SectionEntity)
+
+    @Query("DELETE FROM routine_sections WHERE id = :id")
+    suspend fun deleteSection(id: String)
+
+    /** Routines of a deleted section stay, without a section. */
+    @Query("UPDATE routines SET sectionId = NULL WHERE sectionId = :sectionId")
+    suspend fun clearSection(sectionId: String)
+
     @Query("SELECT * FROM routines ORDER BY position, name")
     fun observeRoutines(): Flow<List<RoutineEntity>>
 
@@ -121,15 +152,31 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/** Version 3 adds sections of routines and the section of each workout. */
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `routine_sections` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                "`position` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+        db.execSQL("ALTER TABLE `routines` ADD COLUMN `sectionId` TEXT")
+        db.execSQL("ALTER TABLE `workouts` ADD COLUMN `section` TEXT")
+    }
+}
+
 /** Gym and body data. Kept apart from the food database so adding it needed no migration there. */
-@Database(entities = [RoutineEntity::class, WorkoutEntity::class, WeightEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [SectionEntity::class, RoutineEntity::class, WorkoutEntity::class, WeightEntity::class],
+    version = 3,
+    exportSchema = false,
+)
 abstract class ProgressDatabase : RoomDatabase() {
     abstract fun progressDao(): ProgressDao
 
     companion object {
         fun build(context: Context): ProgressDatabase =
             Room.databaseBuilder(context, ProgressDatabase::class.java, "progress.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

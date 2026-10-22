@@ -52,8 +52,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.thupapuha.macrotracker.core.gym.BestLift
 import io.github.thupapuha.macrotracker.core.gym.BodyMetric
 import io.github.thupapuha.macrotracker.core.gym.Gym
+import io.github.thupapuha.macrotracker.core.gym.LoadUnit
 import io.github.thupapuha.macrotracker.core.gym.WeightGoal
 import io.github.thupapuha.macrotracker.core.model.MealType
 import io.github.thupapuha.macrotracker.core.supabase.FeedPost
@@ -223,6 +225,7 @@ private fun MacroPill(label: String, value: Double, target: Double?, color: Colo
 @Composable
 private fun WorkoutContent(workout: WorkoutPostData) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        workout.category?.let { Pill(it, container = Brand.Violet.copy(alpha = 0.22f)) }
         WorkoutStatsRow(workout.exercises, workout.durationMin, workout.prCount)
         ExerciseLines(workout.exercises, limit = 5)
     }
@@ -404,7 +407,8 @@ fun MemberSheet(
                 val workouts = progress.workouts
                 if (workouts.isNotEmpty()) {
                     val bests = Gym.bests(workouts.map { it.exercises })
-                    val names = workouts.flatMap { w -> w.exercises.map { it.name } }.associateBy { Gym.key(it) }
+                    // Latest name and unit of each exercise (kilos and plates are separate marks).
+                    val latest = workouts.reversed().flatMap { it.exercises }.associateBy { Gym.key(it) }
                     item {
                         Row(Modifier.fillMaxWidth()) {
                             StatTile("${workouts.count { it.day >= LocalDate.now().minusDays(6).toString() }}", "entrenos 7 días", Modifier.weight(1f))
@@ -415,12 +419,23 @@ fun MemberSheet(
                     item { Text("Mejores marcas", style = MaterialTheme.typography.titleMedium) }
                     item {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            bests.entries.sortedByDescending { it.value.estimatedMax }.take(6).forEach { (key, best) ->
-                                Row {
-                                    Text(names[key] ?: key, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                                    Text("🏆 ${liftLabel(best)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            bests.entries
+                                .sortedWith(
+                                    compareBy<Map.Entry<String, BestLift>> { latest[it.key]?.unit == LoadUnit.PLATES }
+                                        .thenByDescending { it.value.estimatedMax },
+                                )
+                                .take(6)
+                                .forEach { (key, best) ->
+                                    val exercise = latest[key]
+                                    Row {
+                                        Text(exercise?.name ?: key, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                        Text(
+                                            "🏆 ${liftLabel(best, exercise?.unit ?: LoadUnit.KG)}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
                                 }
-                            }
                         }
                     }
                     item { Text("Entrenamientos recientes", style = MaterialTheme.typography.titleMedium) }
@@ -429,7 +444,11 @@ fun MemberSheet(
                             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row {
                                     Text(workout.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                                    Text(dayText(workout.day), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        listOfNotNull(workout.category, dayText(workout.day)).joinToString(" · "),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                                 WorkoutStatsRow(workout.exercises, workout.durationMin, workout.prCount)
                                 ExerciseLines(workout.exercises, limit = 4)

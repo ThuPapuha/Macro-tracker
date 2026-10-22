@@ -6,6 +6,7 @@ import io.github.thupapuha.macrotracker.core.gym.BodyLog
 import io.github.thupapuha.macrotracker.core.gym.BodyMetric
 import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
 import io.github.thupapuha.macrotracker.core.gym.Gym
+import io.github.thupapuha.macrotracker.core.gym.LoadUnit
 import io.github.thupapuha.macrotracker.core.gym.WeightGoal
 import io.github.thupapuha.macrotracker.core.gym.WorkoutSet
 import org.junit.Assert.assertEquals
@@ -118,5 +119,31 @@ class GymTest {
         assertEquals(65.6, logs[0].leanMassKg!!, 1e-9)
         assertFalse(logs[2].hasComposition)
         assertTrue(BodyMetric.FAT.upIsGood == false && BodyMetric.MUSCLE.upIsGood == true)
+    }
+
+    @Test
+    fun platesAreKeptApartFromKilos() {
+        val history = listOf(listOf(ExerciseLog("Prensa", sets(10 to 100.0))))
+        // 5 plates is not compared with 100 kg: first time in plates, no record.
+        val first = Gym.finish(listOf(ExerciseLog("Prensa", sets(10 to 5.0), unit = LoadUnit.PLATES)), history)
+        assertFalse(first.exercises.single().pr)
+        val withPlates = history + listOf(first.exercises)
+        val second = Gym.finish(listOf(ExerciseLog("prensa", sets(10 to 6.0), unit = LoadUnit.PLATES)), withPlates)
+        assertTrue(second.exercises.single().pr)
+        assertEquals(BestLift(100.0, 10), Gym.bests(withPlates)[Gym.key("Prensa")])
+        assertEquals(BestLift(5.0, 10), Gym.bests(withPlates)[Gym.key("Prensa", LoadUnit.PLATES)])
+
+        // Kilos moved only count exercises in kg.
+        assertEquals(1000.0, Gym.totalVolume(withPlates.flatten()), 1e-9)
+        assertEquals("3 × 10 · 4 discos", Gym.describe(sets(10 to 4.0, 10 to 4.0, 10 to 4.0), LoadUnit.PLATES))
+        assertEquals("2 × 10 · 3-4 discos", Gym.describe(sets(10 to 3.0, 10 to 4.0), LoadUnit.PLATES))
+        assertEquals("1 disco", LoadUnit.PLATES.format(1.0))
+        assertEquals(listOf(5.0), Gym.progress("Prensa", withPlates.map { "2026-10-22" to it }, LoadUnit.PLATES).map { it.best.weight })
+
+        // The routine adopts the unit used in the workout.
+        val routine = listOf(ExerciseLog("Prensa", sets(10 to 100.0)))
+        val updated = Gym.updateRoutine(routine, second.exercises)
+        assertEquals(LoadUnit.PLATES, updated.single().unit)
+        assertEquals(6.0, updated.single().sets.single().weight, 1e-9)
     }
 }

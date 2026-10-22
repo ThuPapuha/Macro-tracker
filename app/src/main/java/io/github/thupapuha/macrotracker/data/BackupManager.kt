@@ -100,7 +100,7 @@ class BackupManager(
         val missing = Backups.missingEntries(existing, backup.entries)
         repository.add(missing.map { it.toEntry() })
 
-        val (addedWorkouts, addedWeights) = progress.importBackup(backup.routines, backup.workouts, backup.weights)
+        val (addedWorkouts, addedWeights) = progress.importBackup(backup.sections, backup.routines, backup.workouts, backup.weights)
 
         val prefs = settings.current()
         if (prefs.targets == null) backup.targets?.let { settings.setTargets(it) }
@@ -131,6 +131,7 @@ class BackupManager(
             lastGroupId = prefs.lastGroupId,
             hadGroups = prefs.hasGroups,
             session = if (prefs.hasGroups) settings.sessionStore.load() else null,
+            sections = progress.backupSections(),
             routines = progress.backupRoutines(),
             workouts = progress.backupWorkouts(),
             weights = progress.backupWeights(),

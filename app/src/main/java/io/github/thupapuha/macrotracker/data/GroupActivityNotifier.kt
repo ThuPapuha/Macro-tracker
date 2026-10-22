@@ -160,12 +160,12 @@ class GroupActivityNotifier(
         val title = if (records.isNotEmpty()) {
             "🏆 ${workout.displayName} rompió ${if (records.size == 1) "un récord" else "${records.size} récords"}"
         } else {
-            "💪 ${workout.displayName} terminó de entrenar"
+            "💪 ${workout.displayName} terminó de entrenar" + (workout.category?.let { " · $it" } ?: "")
         }
         val text = if (records.isNotEmpty()) {
             records.take(3).joinToString(", ") { exercise ->
                 val best = Gym.best(exercise.sets)
-                if (best == null) exercise.name else "${exercise.name} ${Gym.formatKg(best.weight)} kg × ${best.reps}"
+                if (best == null) exercise.name else "${exercise.name} ${exercise.unit.format(best.weight)} × ${best.reps}"
             }
         } else {
             "${workout.title}: " + workout.exercises.take(4).joinToString(", ") { it.name } +

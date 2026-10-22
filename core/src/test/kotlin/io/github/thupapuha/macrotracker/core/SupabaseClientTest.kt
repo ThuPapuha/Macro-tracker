@@ -120,7 +120,7 @@ class SupabaseClientTest {
             MockResponse().setBody(
                 """[
                   {"post_type":"workout","post_id":"w1","user_id":"u2","day":"2026-10-21","at":"2026-10-21T20:00:00+00:00",
-                   "data":{"title":"Pierna","pr_count":1,"duration_min":55,
+                   "data":{"title":"Pierna","pr_count":1,"duration_min":55,"category":"Fuerza",
                            "exercises":[{"name":"Sentadilla","sets":[{"reps":8,"weight":82.5}],"pr":true}]},
                    "display_name":"Juan","reactions":{"💪":2,"🔥":1},"my_reaction":"💪","comment_count":3},
                   {"post_type":"food","post_id":"2026-10-21","user_id":"u2","day":"2026-10-21","at":"2026-10-21T19:00:00+00:00",
@@ -142,6 +142,7 @@ class SupabaseClientTest {
         val workout = feed[0].workout!!
         assertEquals(82.5, workout.exercises.single().sets.single().weight, 0.0)
         assertTrue(workout.exercises.single().pr)
+        assertEquals("Fuerza", workout.category)
         assertEquals(mapOf("💪" to 2, "🔥" to 1), feed[0].reactions)
         assertEquals("💪", feed[0].myReaction)
         assertEquals(2000.0, feed[1].food!!.targets!!.calories, 0.0)
