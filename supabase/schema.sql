@@ -81,6 +81,11 @@ create table if not exists public.weight_logs (
   primary key (user_id, day)
 );
 
+-- Body composition measured by hand (scale, InBody...): body fat %, muscle % and bone mass in kg.
+alter table public.weight_logs add column if not exists fat_pct double precision;
+alter table public.weight_logs add column if not exists muscle_pct double precision;
+alter table public.weight_logs add column if not exists bone_kg double precision;
+
 create table if not exists public.workouts (
   id uuid primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -534,7 +539,12 @@ begin
     updated_at = now();
 end $$;
 
-create or replace function public.upsert_weight(p_day date, p_kg double precision) returns void
+-- The app always sends the whole day: a null body composition value clears it.
+drop function if exists public.upsert_weight(date, double precision);
+create or replace function public.upsert_weight(
+  p_day date, p_kg double precision,
+  p_fat double precision default null, p_muscle double precision default null, p_bone double precision default null
+) returns void
 language plpgsql security definer set search_path = public as $$
 declare
   uid uuid := public.require_uid();
@@ -542,12 +552,24 @@ begin
   if p_kg is null or p_kg < 20 or p_kg > 400 then
     raise exception 'Peso fuera de rango';
   end if;
+  if (p_fat is not null and (p_fat < 1 or p_fat > 80))
+     or (p_muscle is not null and (p_muscle < 5 or p_muscle > 90))
+     or (p_bone is not null and (p_bone < 0.2 or p_bone > 15)) then
+    raise exception 'Composición corporal fuera de rango';
+  end if;
   if p_day < current_date - 800 or p_day > current_date + 2 then
     raise exception 'Fecha fuera de rango';
   end if;
-  insert into weight_logs as l (user_id, day, kg) values (uid, p_day, p_kg)
-  on conflict (user_id, day) do update set kg = excluded.kg, updated_at = now()
-  where l.kg is distinct from excluded.kg;
+  insert into weight_logs as l (user_id, day, kg, fat_pct, muscle_pct, bone_kg)
+  values (uid, p_day, p_kg, p_fat, p_muscle, p_bone)
+  on conflict (user_id, day) do update set
+    kg = excluded.kg,
+    fat_pct = excluded.fat_pct,
+    muscle_pct = excluded.muscle_pct,
+    bone_kg = excluded.bone_kg,
+    updated_at = now()
+  where (l.kg, l.fat_pct, l.muscle_pct, l.bone_kg)
+    is distinct from (excluded.kg, excluded.fat_pct, excluded.muscle_pct, excluded.bone_kg);
 end $$;
 
 create or replace function public.delete_weight(p_day date) returns void
@@ -684,8 +706,15 @@ begin
           select 'weight', l.day::text, l.user_id, l.day, l.updated_at,
                  jsonb_build_object(
                    'kg', l.kg, 'goal', pw.goal_weight, 'start', pw.start_weight,
+                   'fat', l.fat_pct, 'muscle', l.muscle_pct, 'bone', l.bone_kg,
                    'previous', (select l2.kg from weight_logs l2
-                                where l2.user_id = l.user_id and l2.day < l.day order by l2.day desc limit 1)
+                                where l2.user_id = l.user_id and l2.day < l.day order by l2.day desc limit 1),
+                   'previous_fat', (select l2.fat_pct from weight_logs l2
+                                    where l2.user_id = l.user_id and l2.day < l.day and l2.fat_pct is not null
+                                    order by l2.day desc limit 1),
+                   'previous_muscle', (select l2.muscle_pct from weight_logs l2
+                                       where l2.user_id = l.user_id and l2.day < l.day and l2.muscle_pct is not null
+                                       order by l2.day desc limit 1)
                  )
           from weight_logs l
           join group_members m on m.user_id = l.user_id and m.group_id = p_group
@@ -748,7 +777,8 @@ begin
     'goal_weight', case when v_share then (select p.goal_weight from profiles p where p.id = p_user) end,
     'start_weight', case when v_share then (select p.start_weight from profiles p where p.id = p_user) end,
     'weights', case when v_share then coalesce((
-      select json_agg(json_build_object('day', l.day, 'kg', l.kg) order by l.day)
+      select json_agg(json_build_object('day', l.day, 'kg', l.kg, 'fat', l.fat_pct, 'muscle', l.muscle_pct, 'bone', l.bone_kg)
+                      order by l.day)
       from weight_logs l where l.user_id = p_user and l.day >= current_date - 180
     ), '[]'::json) else '[]'::json end,
     'workouts', coalesce((
@@ -819,7 +849,7 @@ revoke all on function public.upsert_daily_summary(
 revoke all on function public.bump_ai_usage() from public, anon;
 revoke all on function public.add_meal_comment(uuid, uuid, date, text, text, text, text) from public, anon;
 revoke all on function public.set_weight_goal(double precision, double precision, boolean) from public, anon;
-revoke all on function public.upsert_weight(date, double precision) from public, anon;
+revoke all on function public.upsert_weight(date, double precision, double precision, double precision, double precision) from public, anon;
 revoke all on function public.delete_weight(date) from public, anon;
 revoke all on function public.upsert_workout(uuid, date, text, jsonb, integer, integer, timestamptz) from public, anon;
 revoke all on function public.post_comments(uuid, uuid, text, text) from public, anon;
@@ -846,7 +876,7 @@ grant execute on function public.upsert_daily_summary(
 grant execute on function public.bump_ai_usage() to authenticated;
 grant execute on function public.add_meal_comment(uuid, uuid, date, text, text, text, text) to authenticated;
 grant execute on function public.set_weight_goal(double precision, double precision, boolean) to authenticated;
-grant execute on function public.upsert_weight(date, double precision) to authenticated;
+grant execute on function public.upsert_weight(date, double precision, double precision, double precision, double precision) to authenticated;
 grant execute on function public.delete_weight(date) to authenticated;
 grant execute on function public.upsert_workout(uuid, date, text, jsonb, integer, integer, timestamptz) to authenticated;
 grant execute on function public.post_comments(uuid, uuid, text, text) to authenticated;

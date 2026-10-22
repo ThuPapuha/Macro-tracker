@@ -1,5 +1,6 @@
 package io.github.thupapuha.macrotracker.core.supabase
 
+import io.github.thupapuha.macrotracker.core.gym.BodyLog
 import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.model.Macros
@@ -120,6 +121,12 @@ data class WeightPostData(
     val goal: Double? = null,
     val start: Double? = null,
     val previous: Double? = null,
+    val fat: Double? = null,
+    val muscle: Double? = null,
+    val bone: Double? = null,
+    /** Last earlier measurement of each, to show the change. */
+    @SerialName("previous_fat") val previousFat: Double? = null,
+    @SerialName("previous_muscle") val previousMuscle: Double? = null,
 )
 
 @Serializable
@@ -155,7 +162,15 @@ data class FeedPost(
 }
 
 @Serializable
-data class WeightPoint(val day: String, val kg: Double)
+data class WeightPoint(
+    val day: String,
+    val kg: Double,
+    val fat: Double? = null,
+    val muscle: Double? = null,
+    val bone: Double? = null,
+) {
+    fun toLog() = BodyLog(day, kg, fat, muscle, bone)
+}
 
 @Serializable
 data class MemberWorkout(
@@ -418,12 +433,16 @@ class GroupApi(private val client: SupabaseClient) {
         )
     }
 
-    suspend fun upsertWeight(day: LocalDate, kg: Double) {
+    /** Sends the whole day: a null body composition value clears it on the server. */
+    suspend fun upsertWeight(day: LocalDate, kg: Double, fatPercent: Double?, musclePercent: Double?, boneKg: Double?) {
         client.rpc(
             "upsert_weight",
             buildJsonObject {
                 put("p_day", day.toString())
                 put("p_kg", kg)
+                put("p_fat", fatPercent)
+                put("p_muscle", musclePercent)
+                put("p_bone", boneKg)
             },
         )
     }

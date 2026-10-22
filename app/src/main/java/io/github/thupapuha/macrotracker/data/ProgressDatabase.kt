@@ -10,6 +10,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 /** A routine and its current target sets, as a JSON list of `ExerciseLog`. */
@@ -39,11 +41,14 @@ data class WorkoutEntity(
     val deleted: Boolean = false,
 )
 
-/** One weigh-in per day, in kg. */
+/** One weigh-in per day, in kg, with the body composition if it was measured. */
 @Entity(tableName = "weights")
 data class WeightEntity(
     @PrimaryKey val date: String,
     val kg: Double,
+    val fatPercent: Double? = null,
+    val musclePercent: Double? = null,
+    val boneKg: Double? = null,
     val updatedAt: Long = System.currentTimeMillis(),
     val synced: Boolean = false,
     val deleted: Boolean = false,
@@ -107,13 +112,24 @@ interface ProgressDao {
     suspend fun purgeWeight(date: String)
 }
 
-/** Gym and body weight data. Kept apart from the food database so adding it needed no migration. */
-@Database(entities = [RoutineEntity::class, WorkoutEntity::class, WeightEntity::class], version = 1, exportSchema = false)
+/** Version 2 adds body composition to the weigh-ins. */
+private val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `weights` ADD COLUMN `fatPercent` REAL")
+        db.execSQL("ALTER TABLE `weights` ADD COLUMN `musclePercent` REAL")
+        db.execSQL("ALTER TABLE `weights` ADD COLUMN `boneKg` REAL")
+    }
+}
+
+/** Gym and body data. Kept apart from the food database so adding it needed no migration there. */
+@Database(entities = [RoutineEntity::class, WorkoutEntity::class, WeightEntity::class], version = 2, exportSchema = false)
 abstract class ProgressDatabase : RoomDatabase() {
     abstract fun progressDao(): ProgressDao
 
     companion object {
         fun build(context: Context): ProgressDatabase =
-            Room.databaseBuilder(context, ProgressDatabase::class.java, "progress.db").build()
+            Room.databaseBuilder(context, ProgressDatabase::class.java, "progress.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
     }
 }

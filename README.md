@@ -11,17 +11,17 @@ App Android para registrar los macros de tus comidas día a día, con grupos par
   - **Recientes**: repite algo que ya comiste con un toque.
 - **Historial**: gráfico de calorías de 7, 14 o 30 días, promedios y días que cumpliste tu objetivo.
 - **Progreso**:
-  - **Peso**: registra tu peso, ponle una meta (peso inicial y peso meta) y mira cuánto te falta y el gráfico de los últimos 90 días.
+  - **Peso y composición corporal**: registra tu peso y, si lo mides (báscula de bioimpedancia, InBody…), tu porcentaje de grasa, porcentaje de músculo y masa ósea en kg, todo a mano. Ponle una meta de peso (inicial y meta), mira cuánto te falta, cómo cambia cada medida (en verde si va bien: menos grasa, más músculo), tu masa grasa y magra, y el gráfico de los últimos 180 días de cada medida. Puedes editar o borrar cualquier registro.
   - **Gym**: arma tus rutinas con los ejercicios que quieras y, para cada uno, sus series con repeticiones y peso. Al entrenar, cambias las repes y los kilos de cada serie y las marcas al terminarlas; la rutina recuerda lo último que levantaste para la próxima vez. La app detecta tus récords (más peso que nunca, o más repes con tu mayor peso) y guarda el historial y el progreso de cada ejercicio. Si cierras la app a mitad de entrenamiento, al volver sigue donde lo dejaste.
 - **Grupos** (tipo red social): crea un grupo y comparte el código de 6 letras.
-  - Arriba ves a cada amigo como una "historia" cuyo anillo se llena con las calorías del día (y se pinta de colores cuando cumple su objetivo). Toca a alguien para ver su perfil: su peso y meta (si los comparte), sus entrenamientos recientes y sus mejores marcas.
+  - Arriba ves a cada amigo como una "historia" cuyo anillo se llena con las calorías del día (y se pinta de colores cuando cumple su objetivo). Toca a alguien para ver su perfil: su peso, composición corporal y meta (si los comparte), sus entrenamientos recientes y sus mejores marcas.
   - **Feed**: las comidas del día, los entrenamientos (con sus récords 🏆) y los registros de peso de todos. Puedes reaccionar (👍🔥💪👏😂) y comentar cada publicación o un alimento concreto.
   - **Hoy**: el progreso diario de cada uno frente a sus objetivos de calorías y macros.
   - **Ranking**: días en objetivo de alimentación, entrenos y récords de la semana, y avance hacia las metas de peso.
 - **Notificaciones**: te avisa cuando un amigo registra comida o un entrenamiento, y cuando comentan o reaccionan a lo tuyo. No hay servidor de notificaciones push: la app revisa cada ~15 minutos en segundo plano (puedes apagarlo en Perfil).
 - **Perfil**: tu nombre, tus objetivos (sube un PDF, una imagen, un Word o un texto y la IA fija tus calorías y macros; o usa la calculadora Mifflin-St Jeor o edítalos a mano) y qué compartes con tus grupos.
 
-Tus datos se guardan en el teléfono. Con los grupos se comparten los totales del día y, si lo permites, los nombres de los alimentos; tus entrenamientos; y tu peso con su meta, salvo que lo desactives en *Perfil → Compartir mi peso*.
+Tus datos se guardan en el teléfono. Con los grupos se comparten los totales del día y, si lo permites, los nombres de los alimentos; tus entrenamientos; y tu peso, composición corporal y meta, salvo que lo desactives en *Perfil → Compartir mi peso y composición corporal*.
 
 ## Cómo funciona la clave de Gemini
 

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.thupapuha.macrotracker.core.gym.BodyMetric
 import io.github.thupapuha.macrotracker.core.gym.Gym
 import io.github.thupapuha.macrotracker.core.gym.WeightGoal
 import io.github.thupapuha.macrotracker.core.model.MealType
@@ -71,15 +72,18 @@ import io.github.thupapuha.macrotracker.ui.common.StatTile
 import io.github.thupapuha.macrotracker.ui.common.dayLabel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
 import io.github.thupapuha.macrotracker.ui.common.timeAgo
+import io.github.thupapuha.macrotracker.ui.progress.BodyChart
+import io.github.thupapuha.macrotracker.ui.progress.CompositionRow
 import io.github.thupapuha.macrotracker.ui.progress.ExerciseLines
-import io.github.thupapuha.macrotracker.ui.progress.LineChart
+import io.github.thupapuha.macrotracker.ui.progress.TrendPill
 import io.github.thupapuha.macrotracker.ui.progress.WorkoutStatsRow
 import io.github.thupapuha.macrotracker.ui.progress.kg
 import io.github.thupapuha.macrotracker.ui.progress.liftLabel
+import io.github.thupapuha.macrotracker.ui.progress.metricColor
+import io.github.thupapuha.macrotracker.ui.progress.metricText
 import io.github.thupapuha.macrotracker.ui.theme.Brand
 import io.github.thupapuha.macrotracker.ui.theme.MacroColors
 import java.time.LocalDate
-import kotlin.math.abs
 
 /** The post a comments sheet is about. [postId] is the day for food and weight, the id for workouts. */
 data class PostRef(
@@ -116,7 +120,7 @@ fun FeedPostCard(
     val action = when (post.type) {
         PostType.FOOD -> "registró sus comidas de ${dayText(post.day)}"
         PostType.WORKOUT -> "entrenó ${post.workout?.title.orEmpty()}"
-        else -> "registró su peso"
+        else -> if (post.weight?.let { it.fat ?: it.muscle ?: it.bone } != null) "registró su peso y composición" else "registró su peso"
     }
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -231,15 +235,19 @@ private fun WeightContent(weight: WeightPostData) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(kg(weight.kg), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.width(10.dp))
-            weight.previous?.let { previous ->
-                val change = weight.kg - previous
-                if (abs(change) >= 0.05) {
-                    // Green when it moves toward the goal (or down, without a goal).
-                    val good = if (goal != null) (change < 0) == goal.losing else change < 0
-                    Pill(
-                        (if (change < 0) "▼ " else "▲ ") + kg(abs(change)),
-                        container = (if (good) Brand.Emerald else Brand.Amber).copy(alpha = 0.22f),
-                    )
+            // Without a goal, going down counts as the good direction.
+            TrendPill(BodyMetric.WEIGHT, weight.previous?.let { weight.kg - it }, goal?.losing ?: true)
+        }
+        val composition = listOf(
+            Triple(BodyMetric.FAT, weight.fat, weight.previousFat),
+            Triple(BodyMetric.MUSCLE, weight.muscle, weight.previousMuscle),
+            Triple(BodyMetric.BONE, weight.bone, null),
+        ).filter { it.second != null }
+        if (composition.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                composition.forEach { (metric, value, previous) ->
+                    Pill("${metric.label} ${metricText(metric, value!!)}", container = metricColor(metric).copy(alpha = 0.2f))
+                    TrendPill(metric, previous?.let { value - it })
                 }
             }
         }
@@ -447,7 +455,7 @@ fun MemberSheet(
 private fun MemberWeight(progress: MemberProgress) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("⚖️ Peso", style = MaterialTheme.typography.titleMedium)
+            Text("⚖️ Peso y composición", style = MaterialTheme.typography.titleMedium)
             when {
                 !progress.shareWeight -> Text(
                     "Prefiere no compartir su peso.",
@@ -482,9 +490,9 @@ private fun MemberWeight(progress: MemberProgress) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (progress.weights.size >= 2) {
-                        LineChart(progress.weights.map { it.kg }, reference = goal?.goal, color = Brand.Amber)
-                    }
+                    val logs = progress.weights.map { it.toLog() }
+                    CompositionRow(logs)
+                    BodyChart(logs, goal?.goal)
                 }
             }
         }

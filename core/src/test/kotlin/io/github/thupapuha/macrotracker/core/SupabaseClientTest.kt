@@ -128,7 +128,8 @@ class SupabaseClientTest {
                            "target_carbs":200,"target_fat":60,"meals":[{"name":"Avena","calories":300,"meal":"BREAKFAST"}]},
                    "display_name":"Juan","reactions":{},"my_reaction":null,"comment_count":0},
                   {"post_type":"weight","post_id":"2026-10-21","user_id":"u3","day":"2026-10-21","at":"2026-10-21T08:00:00+00:00",
-                   "data":{"kg":80.4,"goal":75,"start":82,"previous":81.2},"display_name":"Ana","reactions":{},"comment_count":0},
+                   "data":{"kg":80.4,"goal":75,"start":82,"previous":81.2,"fat":18.7,"previous_fat":19.2,"muscle":null,"bone":3.1},
+                   "display_name":"Ana","reactions":{},"comment_count":0},
                   {"post_type":"story","post_id":"x","user_id":"u3","day":"2026-10-21","at":"2026-10-21T07:00:00+00:00",
                    "data":{},"display_name":"Ana"}
                 ]""",
@@ -147,6 +148,8 @@ class SupabaseClientTest {
         assertNull(feed[1].myReaction)
         assertEquals(81.2, feed[2].weight!!.previous!!, 0.0)
         assertNotNull(feed[2].weight!!.goal)
+        assertEquals(-0.5, feed[2].weight!!.fat!! - feed[2].weight!!.previousFat!!, 1e-9)
+        assertNull(feed[2].weight!!.muscle)
         val request = server.takeRequest()
         assertEquals("/rest/v1/rpc/group_feed", request.path)
         assertEquals("""{"p_group":"g1","p_before":null,"p_limit":30}""", request.body.readUtf8())

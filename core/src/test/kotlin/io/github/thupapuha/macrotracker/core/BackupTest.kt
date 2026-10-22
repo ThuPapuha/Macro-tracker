@@ -35,7 +35,7 @@ class BackupTest {
             workouts = listOf(
                 BackupWorkout("w1", "2026-10-21", "Pierna", "r1", listOf(ExerciseLog("Sentadilla", listOf(WorkoutSet(8, 82.5)), pr = true)), 1, 50, 9_000),
             ),
-            weights = listOf(BackupWeight("2026-10-21", 80.4)),
+            weights = listOf(BackupWeight("2026-10-21", 80.4, 18.5, 41.0, 3.1), BackupWeight("2026-10-20", 80.9)),
             weightGoal = WeightGoal(82.0, 75.0),
             shareWeight = false,
         )

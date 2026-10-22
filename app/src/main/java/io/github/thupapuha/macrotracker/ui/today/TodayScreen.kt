@@ -33,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +54,7 @@ import io.github.thupapuha.macrotracker.data.FoodEntry
 import io.github.thupapuha.macrotracker.data.FoodRepository
 import io.github.thupapuha.macrotracker.data.ProgressRepository
 import io.github.thupapuha.macrotracker.data.SettingsStore
+import io.github.thupapuha.macrotracker.data.WeightEntry
 import io.github.thupapuha.macrotracker.data.macros
 import io.github.thupapuha.macrotracker.data.mealType
 import io.github.thupapuha.macrotracker.ui.common.Avatar
@@ -66,7 +66,7 @@ import io.github.thupapuha.macrotracker.ui.common.appViewModel
 import io.github.thupapuha.macrotracker.ui.common.dayLabel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
 import io.github.thupapuha.macrotracker.ui.common.macroLine
-import io.github.thupapuha.macrotracker.ui.progress.WeightLogDialog
+import io.github.thupapuha.macrotracker.ui.progress.BodyLogDialog
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -113,11 +113,12 @@ class TodayViewModel(
         viewModelScope.launch { avatarSeed = settings.sessionStore.load()?.userId.orEmpty() }
     }
 
-    fun logWeight(day: LocalDate, kg: Double) {
-        viewModelScope.launch { progress.logWeight(day, kg) }
-    }
+    val weights: StateFlow<List<WeightEntry>> = progress.weights
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    suspend fun lastWeight(): Double? = progress.latestWeight()?.kg
+    fun logWeight(entry: WeightEntry) {
+        viewModelScope.launch { progress.logWeight(entry) }
+    }
 
     val entries: StateFlow<List<FoodEntry>> = date
         .flatMapLatest { repository.observeDay(it) }
@@ -160,8 +161,7 @@ fun TodayScreen(
     val name by vm.displayName.collectAsStateWithLifecycle()
     val streak by vm.streak.collectAsStateWithLifecycle()
     var loggingWeight by remember { mutableStateOf(false) }
-    var lastWeight by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(loggingWeight) { if (loggingWeight) lastWeight = vm.lastWeight() }
+    val weights by vm.weights.collectAsStateWithLifecycle()
     val date by vm.date.collectAsStateWithLifecycle()
     val entries by vm.entries.collectAsStateWithLifecycle()
     val targets by vm.targets.collectAsStateWithLifecycle()
@@ -276,11 +276,11 @@ fun TodayScreen(
     }
 
     if (loggingWeight) {
-        WeightLogDialog(
-            lastKg = lastWeight,
+        BodyLogDialog(
+            entries = weights,
             onDismiss = { loggingWeight = false },
-            onSave = { day, kg ->
-                vm.logWeight(day, kg)
+            onSave = {
+                vm.logWeight(it)
                 loggingWeight = false
             },
         )

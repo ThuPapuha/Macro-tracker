@@ -43,7 +43,13 @@ data class BackupWorkout(
 )
 
 @Serializable
-data class BackupWeight(val date: String, val kg: Double)
+data class BackupWeight(
+    val date: String,
+    val kg: Double,
+    val fatPercent: Double? = null,
+    val musclePercent: Double? = null,
+    val boneKg: Double? = null,
+)
 
 /**
  * Everything needed to rebuild the app after a reinstall: the food log, goals and, if the user was
