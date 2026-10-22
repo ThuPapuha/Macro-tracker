@@ -178,6 +178,7 @@ fun NumberField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    placeholder: String? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -185,6 +186,7 @@ fun NumberField(
             if (new.length <= 7 && new.all { it.isDigit() || it == '.' || it == ',' }) onValueChange(new)
         },
         label = { Text(label, maxLines = 1) },
+        placeholder = placeholder?.let { { Text(it, maxLines = 1) } },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         modifier = modifier,

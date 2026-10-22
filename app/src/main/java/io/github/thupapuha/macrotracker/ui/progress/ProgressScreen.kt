@@ -84,8 +84,12 @@ class ProgressViewModel(
     val hasActiveWorkout: StateFlow<Boolean> = settings.hasActiveWorkout
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    fun logWeight(date: LocalDate, kg: Double) {
-        viewModelScope.launch { repository.logWeight(date, kg) }
+    fun logWeight(entry: WeightEntry) {
+        viewModelScope.launch { repository.logWeight(entry) }
+    }
+
+    fun deleteWeight(date: LocalDate) {
+        viewModelScope.launch { repository.deleteWeight(date) }
     }
 
     fun setGoal(goal: WeightGoal?, share: Boolean) {
@@ -135,6 +139,7 @@ fun ProgressScreen(
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val hasActive by vm.hasActiveWorkout.collectAsStateWithLifecycle()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingDay by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingStart by remember { mutableStateOf<Routine?>(null) }
     var askStart by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<Workout?>(null) }
@@ -176,6 +181,7 @@ fun ProgressScreen(
                     goal = prefs?.weightGoal,
                     onLog = { dialog = "weight" },
                     onGoal = { dialog = "goal" },
+                    onHistory = { dialog = "history" },
                 )
             }
 
@@ -239,13 +245,21 @@ fun ProgressScreen(
     }
 
     when (dialog) {
-        "weight" -> WeightLogDialog(
-            lastKg = weights.lastOrNull()?.kg,
+        "weight" -> BodyLogDialog(
+            entries = weights,
             onDismiss = { dialog = null },
-            onSave = { date, kg ->
-                vm.logWeight(date, kg)
+            onSave = {
+                vm.logWeight(it)
                 dialog = null
             },
+        )
+        "history" -> BodyHistoryDialog(
+            entries = weights,
+            onEdit = {
+                editingDay = it.date.toString()
+                dialog = null
+            },
+            onDismiss = { dialog = null },
         )
         "goal" -> WeightGoalDialog(
             goal = prefs?.weightGoal,
@@ -255,6 +269,22 @@ fun ProgressScreen(
             onSave = { goal, share ->
                 vm.setGoal(goal, share)
                 dialog = null
+            },
+        )
+    }
+
+    editingDay?.let { day ->
+        BodyLogDialog(
+            entries = weights,
+            fixedDate = LocalDate.parse(day),
+            onDismiss = { editingDay = null },
+            onSave = {
+                vm.logWeight(it)
+                editingDay = null
+            },
+            onDelete = { date ->
+                vm.deleteWeight(date)
+                editingDay = null
             },
         )
     }

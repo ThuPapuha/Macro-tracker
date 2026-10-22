@@ -306,9 +306,9 @@ fun ProfileScreen() {
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Compartir mi peso con mis grupos", style = MaterialTheme.typography.bodyLarge)
+                            Text("Compartir mi peso y composición corporal", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "Tu peso, tu meta y tu avance. Tus entrenamientos siempre se comparten.",
+                                "Peso, grasa, músculo, masa ósea, tu meta y tu avance. Tus entrenamientos siempre se comparten.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

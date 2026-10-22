@@ -1,12 +1,16 @@
 package io.github.thupapuha.macrotracker.core
 
 import io.github.thupapuha.macrotracker.core.gym.BestLift
+import io.github.thupapuha.macrotracker.core.gym.Body
+import io.github.thupapuha.macrotracker.core.gym.BodyLog
+import io.github.thupapuha.macrotracker.core.gym.BodyMetric
 import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
 import io.github.thupapuha.macrotracker.core.gym.Gym
 import io.github.thupapuha.macrotracker.core.gym.WeightGoal
 import io.github.thupapuha.macrotracker.core.gym.WorkoutSet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -95,5 +99,24 @@ class GymTest {
         assertFalse(bulk.losing)
         assertEquals(0.5f, bulk.progress(63.0), 1e-6f)
         assertEquals(0.0, bulk.remaining(67.0), 1e-9)
+    }
+
+    @Test
+    fun bodyCompositionTrendsSkipDaysWithoutTheMeasurement() {
+        val logs = listOf(
+            BodyLog("2026-10-22", 80.0, fatPercent = 18.0, boneKg = 3.1),
+            BodyLog("2026-10-10", 82.0, fatPercent = 20.0, musclePercent = 40.0),
+            BodyLog("2026-10-15", 81.0),
+        )
+        val fat = Body.trend(logs, BodyMetric.FAT)!!
+        assertEquals(18.0, fat.current, 1e-9)
+        assertEquals(-2.0, fat.change!!, 1e-9)
+        assertNull(Body.trend(logs, BodyMetric.MUSCLE)!!.change)
+        assertEquals(listOf(82.0, 81.0, 80.0), Body.series(logs, BodyMetric.WEIGHT).map { it.second })
+        assertEquals(listOf(BodyMetric.WEIGHT, BodyMetric.FAT), Body.chartable(logs))
+        assertEquals(14.4, logs[0].fatMassKg!!, 1e-9)
+        assertEquals(65.6, logs[0].leanMassKg!!, 1e-9)
+        assertFalse(logs[2].hasComposition)
+        assertTrue(BodyMetric.FAT.upIsGood == false && BodyMetric.MUSCLE.upIsGood == true)
     }
 }

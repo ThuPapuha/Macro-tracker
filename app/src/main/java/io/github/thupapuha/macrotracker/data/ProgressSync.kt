@@ -66,7 +66,13 @@ class ProgressSync(
                 }
                 for (weight in repository.pendingWeights().sortedBy { it.date }) {
                     val day = LocalDate.parse(weight.date)
-                    skipIfRejected { if (weight.deleted) api.deleteWeight(day) else api.upsertWeight(day, weight.kg) }
+                    skipIfRejected {
+                        if (weight.deleted) {
+                            api.deleteWeight(day)
+                        } else {
+                            api.upsertWeight(day, weight.kg, weight.fatPercent, weight.musclePercent, weight.boneKg)
+                        }
+                    }
                     repository.markWeightSynced(weight)
                 }
                 for (workout in repository.pendingWorkouts().sortedBy { it.finishedAt }) {

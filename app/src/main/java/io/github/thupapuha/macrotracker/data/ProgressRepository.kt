@@ -3,6 +3,7 @@ package io.github.thupapuha.macrotracker.data
 import io.github.thupapuha.macrotracker.core.backup.BackupRoutine
 import io.github.thupapuha.macrotracker.core.backup.BackupWeight
 import io.github.thupapuha.macrotracker.core.backup.BackupWorkout
+import io.github.thupapuha.macrotracker.core.gym.BodyLog
 import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
 import io.github.thupapuha.macrotracker.core.gym.Gym
 import io.github.thupapuha.macrotracker.core.net.AppJson
@@ -32,7 +33,18 @@ data class Workout(
     val finishedAt: Long,
 )
 
-data class WeightEntry(val date: LocalDate, val kg: Double)
+/** A day's weigh-in; body fat and muscle in %, bone mass in kg, when measured. */
+data class WeightEntry(
+    val date: LocalDate,
+    val kg: Double,
+    val fatPercent: Double? = null,
+    val musclePercent: Double? = null,
+    val boneKg: Double? = null,
+) {
+    fun toLog() = BodyLog(date.toString(), kg, fatPercent, musclePercent, boneKg)
+}
+
+private fun WeightEntity.toEntry() = WeightEntry(LocalDate.parse(date), kg, fatPercent, musclePercent, boneKg)
 
 private val exercisesSerializer = ListSerializer(ExerciseLog.serializer())
 
@@ -67,9 +79,7 @@ class ProgressRepository(private val dao: ProgressDao) {
     val workouts: Flow<List<Workout>> = dao.observeWorkouts().map { list -> list.map { it.toWorkout() } }
 
     /** Oldest first. */
-    val weights: Flow<List<WeightEntry>> = dao.observeWeights().map { list ->
-        list.map { WeightEntry(LocalDate.parse(it.date), it.kg) }
-    }
+    val weights: Flow<List<WeightEntry>> = dao.observeWeights().map { list -> list.map { it.toEntry() } }
 
     suspend fun routine(id: String): Routine? = dao.routine(id)?.toRoutine()
 
@@ -132,8 +142,9 @@ class ProgressRepository(private val dao: ProgressDao) {
         changes.emit(Unit)
     }
 
-    suspend fun logWeight(date: LocalDate, kg: Double) {
-        dao.upsertWeight(WeightEntity(date.toString(), kg))
+    /** Saves the day's weigh-in, replacing what was there (also the body composition). */
+    suspend fun logWeight(entry: WeightEntry) {
+        dao.upsertWeight(WeightEntity(entry.date.toString(), entry.kg, entry.fatPercent, entry.musclePercent, entry.boneKg))
         changes.emit(Unit)
     }
 
@@ -142,9 +153,6 @@ class ProgressRepository(private val dao: ProgressDao) {
         dao.upsertWeight(existing.copy(deleted = true, synced = false, updatedAt = System.currentTimeMillis()))
         changes.emit(Unit)
     }
-
-    suspend fun latestWeight(): WeightEntry? =
-        dao.allWeights().lastOrNull()?.let { WeightEntry(LocalDate.parse(it.date), it.kg) }
 
     // Syncing with the groups' server.
 
@@ -169,7 +177,8 @@ class ProgressRepository(private val dao: ProgressDao) {
         BackupWorkout(it.id, it.date, it.title, it.routineId, decodeExercises(it.exercisesJson), it.prCount, it.durationMin, it.finishedAt)
     }
 
-    suspend fun backupWeights(): List<BackupWeight> = dao.allWeights().map { BackupWeight(it.date, it.kg) }
+    suspend fun backupWeights(): List<BackupWeight> =
+        dao.allWeights().map { BackupWeight(it.date, it.kg, it.fatPercent, it.musclePercent, it.boneKg) }
 
     /** Adds what is missing; returns how many workouts and weigh-ins were added. */
     suspend fun importBackup(
@@ -201,7 +210,7 @@ class ProgressRepository(private val dao: ProgressDao) {
         }
         val knownDays = dao.allWeights().mapTo(HashSet()) { it.date }
         val newWeights = weights.filter { knownDays.add(it.date) }
-        newWeights.forEach { dao.upsertWeight(WeightEntity(it.date, it.kg)) }
+        newWeights.forEach { dao.upsertWeight(WeightEntity(it.date, it.kg, it.fatPercent, it.musclePercent, it.boneKg)) }
         if (routines.isNotEmpty() || addedWorkouts > 0 || newWeights.isNotEmpty()) changes.emit(Unit)
         return addedWorkouts to newWeights.size
     }
