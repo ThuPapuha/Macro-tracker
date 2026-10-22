@@ -2,19 +2,25 @@
 
 package io.github.thupapuha.macrotracker.ui.progress
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,21 +40,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.github.thupapuha.macrotracker.data.ProgressRepository
 import io.github.thupapuha.macrotracker.data.Routine
+import io.github.thupapuha.macrotracker.data.Section
 import io.github.thupapuha.macrotracker.ui.common.ConfirmDialog
 import io.github.thupapuha.macrotracker.ui.common.ErrorText
 import io.github.thupapuha.macrotracker.ui.common.appViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
 class RoutineEditorViewModel(
     private val routineId: String?,
+    initialSectionId: String?,
     private val repository: ProgressRepository,
 ) : ViewModel() {
     val isNew = routineId == null
+    val sections: StateFlow<List<Section>> = repository.sections
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     var name by mutableStateOf("")
+    var sectionId by mutableStateOf(initialSectionId)
     var exercises by mutableStateOf<List<EditableExercise>>(emptyList())
     var loaded by mutableStateOf(false)
         private set
@@ -63,6 +78,7 @@ class RoutineEditorViewModel(
                 name = routine.name
                 exercises = routine.exercises.map(EditableExercise::from)
                 position = routine.position
+                sectionId = routine.sectionId
             }
             loaded = true
         }
@@ -80,6 +96,11 @@ class RoutineEditorViewModel(
         exercises = exercises + EditableExercise.empty(exerciseName)
     }
 
+    /** Creates a section from the editor and puts the routine in it. */
+    fun createSection(sectionName: String) {
+        viewModelScope.launch { sectionId = repository.saveSection(sectionName) }
+    }
+
     fun save(onSaved: () -> Unit) {
         val logs = exercises.map { it.toLog() }
             .map { log -> log.copy(sets = log.sets.filter { it.reps > 0 }.map { it.copy(done = true) }) }
@@ -92,7 +113,9 @@ class RoutineEditorViewModel(
         }
         if (error != null) return
         viewModelScope.launch {
-            repository.saveRoutine(Routine(routineId ?: UUID.randomUUID().toString(), name.trim().take(60), logs, position))
+            repository.saveRoutine(
+                Routine(routineId ?: UUID.randomUUID().toString(), name.trim().take(60), logs, position, sectionId),
+            )
             onSaved()
         }
     }
@@ -108,9 +131,13 @@ class RoutineEditorViewModel(
 
 /** Create or edit a routine: its exercises and, for each one, the sets with reps and weight. */
 @Composable
-fun RoutineEditorScreen(routineId: String?, onDone: () -> Unit) {
-    val vm = appViewModel(key = "routine-${routineId ?: "new"}") { RoutineEditorViewModel(routineId, it.progressRepository) }
+fun RoutineEditorScreen(routineId: String?, initialSectionId: String?, onDone: () -> Unit) {
+    val vm = appViewModel(key = "routine-${routineId ?: "new"}") {
+        RoutineEditorViewModel(routineId, initialSectionId, it.progressRepository)
+    }
+    val sections by vm.sections.collectAsStateWithLifecycle()
     var adding by remember { mutableStateOf(false) }
+    var creatingSection by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -154,10 +181,26 @@ fun RoutineEditorScreen(routineId: String?, onDone: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            item(key = "section") {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Sección", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = vm.sectionId == null, onClick = { vm.sectionId = null }, label = { Text("Sin sección") })
+                        sections.forEach { section ->
+                            FilterChip(
+                                selected = vm.sectionId == section.id,
+                                onClick = { vm.sectionId = section.id },
+                                label = { Text(section.name) },
+                            )
+                        }
+                        AssistChip(onClick = { creatingSection = true }, label = { Text("+ Nueva") })
+                    }
+                }
+            }
             item(key = "hint") {
                 Text(
-                    "Pon las series con las repeticiones y el peso que haces hoy. Al terminar cada entrenamiento, " +
-                        "la rutina se actualiza con lo que levantaste.",
+                    "Pon las series con las repeticiones y la carga que haces hoy, en kg o en discos (para máquinas). " +
+                        "Al terminar cada entrenamiento, la rutina se actualiza con lo que levantaste.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -187,6 +230,17 @@ fun RoutineEditorScreen(routineId: String?, onDone: () -> Unit) {
             onAdd = {
                 vm.add(it)
                 adding = false
+            },
+        )
+    }
+    if (creatingSection) {
+        SectionDialog(
+            section = null,
+            existing = sections.map { it.name },
+            onDismiss = { creatingSection = false },
+            onSave = {
+                vm.createSection(it)
+                creatingSection = false
             },
         )
     }

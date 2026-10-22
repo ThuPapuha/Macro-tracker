@@ -101,6 +101,8 @@ create table if not exists public.workouts (
 create index if not exists workouts_user_day_idx on public.workouts (user_id, day);
 -- When the workout happened on the phone; created_at is when the server first saw it.
 alter table public.workouts add column if not exists performed_at timestamptz;
+-- Section of the routine it came from (Hipertrofia, Fuerza or any the user creates).
+alter table public.workouts add column if not exists category text;
 
 create table if not exists public.post_reactions (
   group_id uuid not null references public.groups (id) on delete cascade,
@@ -493,7 +495,7 @@ begin
       select json_agg(w2 order by w2.created_at) from (
         select distinct on (w.id)
           w.id, w.user_id, coalesce(p.display_name, 'Anónimo') as display_name,
-          m.group_id, g.name as group_name, w.title, w.pr_count, w.exercises, w.created_at
+          m.group_id, g.name as group_name, w.title, w.pr_count, w.exercises, w.created_at, w.category
         from workouts w
         join group_members m on m.user_id = w.user_id
         join group_members mine on mine.group_id = m.group_id and mine.user_id = uid
@@ -581,9 +583,11 @@ begin
 end $$;
 
 drop function if exists public.upsert_workout(uuid, date, text, jsonb, integer, integer);
+drop function if exists public.upsert_workout(uuid, date, text, jsonb, integer, integer, timestamptz);
 create or replace function public.upsert_workout(
   p_id uuid, p_day date, p_title text, p_exercises jsonb,
-  p_pr_count integer default 0, p_duration_min integer default null, p_performed_at timestamptz default null
+  p_pr_count integer default 0, p_duration_min integer default null, p_performed_at timestamptz default null,
+  p_category text default null
 ) returns void
 language plpgsql security definer set search_path = public as $$
 declare
@@ -591,6 +595,7 @@ declare
   v_title text := coalesce(nullif(left(btrim(coalesce(p_title, '')), 80), ''), 'Entrenamiento');
   v_exercises jsonb := coalesce(p_exercises, '[]'::jsonb);
   v_performed timestamptz := least(coalesce(p_performed_at, now()), now());
+  v_category text := nullif(left(btrim(coalesce(p_category, '')), 40), '');
 begin
   if p_day < current_date - 800 or p_day > current_date + 2 then
     raise exception 'Fecha fuera de rango';
@@ -598,18 +603,19 @@ begin
   if jsonb_typeof(v_exercises) <> 'array' or length(v_exercises::text) > 50000 then
     raise exception 'Entrenamiento inválido';
   end if;
-  insert into workouts as w (id, user_id, day, title, exercises, pr_count, duration_min, performed_at)
-  values (p_id, uid, p_day, v_title, v_exercises, greatest(coalesce(p_pr_count, 0), 0), p_duration_min, v_performed)
+  insert into workouts as w (id, user_id, day, title, exercises, pr_count, duration_min, performed_at, category)
+  values (p_id, uid, p_day, v_title, v_exercises, greatest(coalesce(p_pr_count, 0), 0), p_duration_min, v_performed, v_category)
   on conflict (id) do update set
     day = excluded.day,
     title = excluded.title,
     exercises = excluded.exercises,
     pr_count = excluded.pr_count,
     duration_min = excluded.duration_min,
+    category = excluded.category,
     updated_at = now()
   where w.user_id = uid
-    and (w.day, w.title, w.exercises, w.pr_count, w.duration_min)
-      is distinct from (excluded.day, excluded.title, excluded.exercises, excluded.pr_count, excluded.duration_min);
+    and (w.day, w.title, w.exercises, w.pr_count, w.duration_min, w.category)
+      is distinct from (excluded.day, excluded.title, excluded.exercises, excluded.pr_count, excluded.duration_min, excluded.category);
 end $$;
 
 create or replace function public.delete_workout(p_id uuid) returns void
@@ -698,7 +704,7 @@ begin
           union all
           select 'workout', w.id::text, w.user_id, w.day, coalesce(w.performed_at, w.created_at),
                  jsonb_build_object('title', w.title, 'exercises', w.exercises,
-                                    'pr_count', w.pr_count, 'duration_min', w.duration_min)
+                                    'pr_count', w.pr_count, 'duration_min', w.duration_min, 'category', w.category)
           from workouts w
           join group_members m on m.user_id = w.user_id and m.group_id = p_group
           where coalesce(w.performed_at, w.created_at) < v_before
@@ -783,7 +789,7 @@ begin
     ), '[]'::json) else '[]'::json end,
     'workouts', coalesce((
       select json_agg(w2 order by w2.day desc, w2.at desc) from (
-        select w.id, w.day, w.title, w.exercises, w.pr_count, w.duration_min,
+        select w.id, w.day, w.title, w.exercises, w.pr_count, w.duration_min, w.category,
                coalesce(w.performed_at, w.created_at) as at
         from workouts w where w.user_id = p_user
         order by w.day desc, coalesce(w.performed_at, w.created_at) desc
@@ -806,6 +812,8 @@ begin
                              then (st->>'reps')::double precision * (st->>'weight')::double precision else 0 end)
              from jsonb_array_elements(case when jsonb_typeof(w.exercises) = 'array' then w.exercises else '[]'::jsonb end) e,
                   jsonb_array_elements(case when jsonb_typeof(e->'sets') = 'array' then e->'sets' else '[]'::jsonb end) st
+             -- Exercises counted in plates have no kilos to add.
+             where coalesce(e->>'unit', 'kg') = 'kg'
            )), 0)::double precision
     from workouts w
     join group_members m on m.user_id = w.user_id and m.group_id = p_group
@@ -851,7 +859,7 @@ revoke all on function public.add_meal_comment(uuid, uuid, date, text, text, tex
 revoke all on function public.set_weight_goal(double precision, double precision, boolean) from public, anon;
 revoke all on function public.upsert_weight(date, double precision, double precision, double precision, double precision) from public, anon;
 revoke all on function public.delete_weight(date) from public, anon;
-revoke all on function public.upsert_workout(uuid, date, text, jsonb, integer, integer, timestamptz) from public, anon;
+revoke all on function public.upsert_workout(uuid, date, text, jsonb, integer, integer, timestamptz, text) from public, anon;
 revoke all on function public.post_comments(uuid, uuid, text, text) from public, anon;
 revoke all on function public.member_progress(uuid, uuid) from public, anon;
 revoke all on function public.group_gym_stats(uuid, date) from public, anon;
@@ -878,7 +886,7 @@ grant execute on function public.add_meal_comment(uuid, uuid, date, text, text, 
 grant execute on function public.set_weight_goal(double precision, double precision, boolean) to authenticated;
 grant execute on function public.upsert_weight(date, double precision, double precision, double precision, double precision) to authenticated;
 grant execute on function public.delete_weight(date) to authenticated;
-grant execute on function public.upsert_workout(uuid, date, text, jsonb, integer, integer, timestamptz) to authenticated;
+grant execute on function public.upsert_workout(uuid, date, text, jsonb, integer, integer, timestamptz, text) to authenticated;
 grant execute on function public.post_comments(uuid, uuid, text, text) to authenticated;
 grant execute on function public.member_progress(uuid, uuid) to authenticated;
 grant execute on function public.group_gym_stats(uuid, date) to authenticated;

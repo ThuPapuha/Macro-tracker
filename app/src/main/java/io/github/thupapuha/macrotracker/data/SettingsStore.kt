@@ -61,6 +61,8 @@ data class ActiveWorkout(
     val date: String,
     val startedAt: Long,
     val exercises: List<ExerciseLog>,
+    /** Section of the routine, saved with the workout. */
+    val section: String? = null,
 )
 
 /** Last friends' days and comments already notified, so each change is announced once. */

@@ -113,6 +113,8 @@ data class WorkoutPostData(
     val exercises: List<ExerciseLog> = emptyList(),
     @SerialName("pr_count") val prCount: Int = 0,
     @SerialName("duration_min") val durationMin: Int? = null,
+    /** Section of the routine (Hipertrofia, Fuerza...), if any. */
+    val category: String? = null,
 )
 
 @Serializable
@@ -180,6 +182,7 @@ data class MemberWorkout(
     val exercises: List<ExerciseLog> = emptyList(),
     @SerialName("pr_count") val prCount: Int = 0,
     @SerialName("duration_min") val durationMin: Int? = null,
+    val category: String? = null,
     val at: String = "",
 )
 
@@ -257,6 +260,7 @@ data class ActivityWorkout(
     @SerialName("pr_count") val prCount: Int = 0,
     val exercises: List<ExerciseLog> = emptyList(),
     @SerialName("created_at") val createdAt: String,
+    val category: String? = null,
 )
 
 /** Someone reacted to one of my posts. */
@@ -459,6 +463,7 @@ class GroupApi(private val client: SupabaseClient) {
         prCount: Int,
         durationMin: Int?,
         performedAt: String?,
+        category: String? = null,
     ) {
         client.rpc(
             "upsert_workout",
@@ -470,6 +475,7 @@ class GroupApi(private val client: SupabaseClient) {
                 put("p_pr_count", prCount)
                 put("p_duration_min", durationMin)
                 put("p_performed_at", performedAt)
+                put("p_category", category)
             },
         )
     }

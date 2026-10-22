@@ -3,6 +3,7 @@ package io.github.thupapuha.macrotracker.core
 import io.github.thupapuha.macrotracker.core.backup.BackupEntry
 import io.github.thupapuha.macrotracker.core.backup.BackupFile
 import io.github.thupapuha.macrotracker.core.backup.BackupRoutine
+import io.github.thupapuha.macrotracker.core.backup.BackupSection
 import io.github.thupapuha.macrotracker.core.backup.BackupWeight
 import io.github.thupapuha.macrotracker.core.backup.BackupWorkout
 import io.github.thupapuha.macrotracker.core.backup.Backups
@@ -31,9 +32,10 @@ class BackupTest {
             lastGroupId = "g1",
             hadGroups = true,
             session = AuthSession("access", "refresh", 5_000, "user-1"),
-            routines = listOf(BackupRoutine("r1", "Pierna", listOf(ExerciseLog("Sentadilla", listOf(WorkoutSet(8, 80.0)))))),
+            sections = listOf(BackupSection("s1", "Hipertrofia"), BackupSection("s2", "Fuerza", 1)),
+            routines = listOf(BackupRoutine("r1", "Pierna", listOf(ExerciseLog("Sentadilla", listOf(WorkoutSet(8, 80.0)))), sectionId = "s1")),
             workouts = listOf(
-                BackupWorkout("w1", "2026-10-21", "Pierna", "r1", listOf(ExerciseLog("Sentadilla", listOf(WorkoutSet(8, 82.5)), pr = true)), 1, 50, 9_000),
+                BackupWorkout("w1", "2026-10-21", "Pierna", "r1", listOf(ExerciseLog("Sentadilla", listOf(WorkoutSet(8, 82.5)), pr = true)), 1, 50, 9_000, "Hipertrofia"),
             ),
             weights = listOf(BackupWeight("2026-10-21", 80.4, 18.5, 41.0, 3.1), BackupWeight("2026-10-20", 80.9)),
             weightGoal = WeightGoal(82.0, 75.0),
@@ -46,7 +48,7 @@ class BackupTest {
     fun readsFilesFromBeforeTheGym() {
         val old = """{"app":"macro-tracker","format":1,"exportedAt":"2026-10-01T00:00:00Z","entries":[],"hadGroups":false}"""
         val file = Backups.decode(old)
-        assertTrue(file.routines.isEmpty() && file.workouts.isEmpty() && file.weights.isEmpty())
+        assertTrue(file.routines.isEmpty() && file.workouts.isEmpty() && file.weights.isEmpty() && file.sections.isEmpty())
         assertEquals(null, file.weightGoal)
         assertTrue(file.shareWeight)
     }

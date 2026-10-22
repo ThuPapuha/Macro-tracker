@@ -23,10 +23,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import io.github.thupapuha.macrotracker.MacroTrackerApp
 import io.github.thupapuha.macrotracker.R
 import io.github.thupapuha.macrotracker.core.model.MealType
@@ -133,12 +135,21 @@ fun AppNavigation(openGroupRequests: MutableStateFlow<String?>) {
             composable("progress") {
                 ProgressScreen(
                     onStartWorkout = { routineId -> nav.navigate("workout/${routineId ?: "free"}") },
-                    onEditRoutine = { routineId -> nav.navigate("routine/${routineId ?: "new"}") },
+                    onEditRoutine = { routineId, sectionId ->
+                        nav.navigate("routine/${routineId ?: "new"}" + (sectionId?.let { "?section=$it" } ?: ""))
+                    },
                 )
             }
-            composable("routine/{id}") { entry ->
+            composable(
+                "routine/{id}?section={section}",
+                arguments = listOf(navArgument("section") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
                 val id = entry.arguments?.getString("id")?.takeIf { it != "new" }
-                RoutineEditorScreen(routineId = id, onDone = { nav.popBackStack() })
+                RoutineEditorScreen(
+                    routineId = id,
+                    initialSectionId = entry.arguments?.getString("section"),
+                    onDone = { nav.popBackStack() },
+                )
             }
             composable("workout/{routine}") { entry ->
                 val routineId = entry.arguments?.getString("routine")?.takeIf { it != "free" }

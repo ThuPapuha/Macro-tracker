@@ -1,9 +1,29 @@
 package io.github.thupapuha.macrotracker.core.gym
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
-/** One set: [weight] in kg (0 for bodyweight exercises). */
+/**
+ * How an exercise's load is counted: kilos, or number of plates (machines with a stack, plate
+ * loaded machines...) when the kilos are not known.
+ */
+@Serializable
+enum class LoadUnit(val label: String) {
+    @SerialName("kg")
+    KG("kg"),
+
+    @SerialName("plates")
+    PLATES("discos");
+
+    /** "80 kg", "1 disco", "4 discos". */
+    fun format(value: Double): String = when (this) {
+        KG -> "${Gym.formatKg(value)} kg"
+        PLATES -> if (value == 1.0) "1 disco" else "${Gym.formatKg(value)} discos"
+    }
+}
+
+/** One set: [weight] in the exercise's [LoadUnit] (0 for bodyweight exercises). */
 @Serializable
 data class WorkoutSet(
     val reps: Int = 0,
@@ -21,6 +41,7 @@ data class ExerciseLog(
     val sets: List<WorkoutSet> = emptyList(),
     val pr: Boolean = false,
     val note: String = "",
+    val unit: LoadUnit = LoadUnit.KG,
 )
 
 /** Heaviest set of an exercise; at equal weight, the one with more reps. */
@@ -49,10 +70,12 @@ object Gym {
         .maxWithOrNull(compareBy<WorkoutSet> { it.weight }.thenBy { it.reps })
         ?.let { BestLift(it.weight, it.reps) }
 
-    /** Kilos moved: reps × weight of the completed sets. */
+    /** Reps × load of the completed sets (kilos moved when the load is in kg). */
     fun volume(sets: List<WorkoutSet>): Double = completedSets(sets).sumOf { it.reps * it.weight }
 
-    fun totalVolume(exercises: List<ExerciseLog>): Double = exercises.sumOf { volume(it.sets) }
+    /** Kilos moved; exercises counted in plates are left out since their kilos are unknown. */
+    fun totalVolume(exercises: List<ExerciseLog>): Double =
+        exercises.filter { it.unit == LoadUnit.KG }.sumOf { volume(it.sets) }
 
     fun completedSetCount(exercises: List<ExerciseLog>): Int = exercises.sumOf { completedSets(it.sets).size }
 
@@ -63,8 +86,14 @@ object Gym {
             (abs(current.weight - previous.weight) <= EPSILON && current.reps > previous.reps)
     }
 
-    /** Exercises are matched by name, ignoring case and surrounding spaces. */
-    fun key(name: String): String = name.trim().lowercase()
+    /**
+     * Exercises are matched by name, ignoring case and surrounding spaces. The same exercise counted
+     * in plates is kept apart, since plates and kilos cannot be compared.
+     */
+    fun key(name: String, unit: LoadUnit = LoadUnit.KG): String =
+        name.trim().lowercase() + if (unit == LoadUnit.PLATES) "#discos" else ""
+
+    fun key(exercise: ExerciseLog): String = key(exercise.name, exercise.unit)
 
     /** Best lift ever per exercise in [history]. */
     fun bests(history: List<List<ExerciseLog>>): Map<String, BestLift> {
@@ -72,7 +101,7 @@ object Gym {
         for (workout in history) {
             for (exercise in workout) {
                 val best = best(exercise.sets) ?: continue
-                val key = key(exercise.name)
+                val key = key(exercise)
                 val known = result[key]
                 if (known == null || isRecord(best, known)) result[key] = best
             }
@@ -89,19 +118,25 @@ object Gym {
         val cleaned = exercises
             .map { it.copy(name = it.name.trim(), sets = completedSets(it.sets)) }
             .filter { it.name.isNotEmpty() && it.sets.isNotEmpty() }
-            .map { it.copy(pr = isRecord(best(it.sets), previous[key(it.name)])) }
+            .map { it.copy(pr = isRecord(best(it.sets), previous[key(it)])) }
         return FinishedWorkout(cleaned, cleaned.count { it.pr })
     }
 
     /**
-     * After a workout, the routine keeps the reps and weights just lifted as its new targets, so the
-     * next session starts from them. Exercises skipped in the workout keep their previous values.
+     * After a workout, the routine keeps the reps and weights just lifted (and the unit used) as its
+     * new targets, so the next session starts from them. Exercises skipped in the workout keep their
+     * previous values.
      */
     fun updateRoutine(routine: List<ExerciseLog>, performed: List<ExerciseLog>): List<ExerciseLog> {
         val byName = performed.associateBy { key(it.name) }
         return routine.map { exercise ->
-            val done = byName[key(exercise.name)]?.let { completedSets(it.sets) }.orEmpty()
-            if (done.isEmpty()) exercise else exercise.copy(sets = done.map { it.copy(done = true) })
+            val match = byName[key(exercise.name)]
+            val done = match?.let { completedSets(it.sets) }.orEmpty()
+            if (match == null || done.isEmpty()) {
+                exercise
+            } else {
+                exercise.copy(sets = done.map { it.copy(done = true) }, unit = match.unit)
+            }
         }
     }
 
@@ -110,26 +145,30 @@ object Gym {
         routine.map { exercise -> exercise.copy(pr = false, sets = exercise.sets.map { it.copy(done = false) }) }
 
     /** Progress of one exercise across workouts given as (day, exercises), oldest first. */
-    fun progress(name: String, workouts: List<Pair<String, List<ExerciseLog>>>): List<ExercisePoint> {
-        val key = key(name)
+    fun progress(
+        name: String,
+        workouts: List<Pair<String, List<ExerciseLog>>>,
+        unit: LoadUnit = LoadUnit.KG,
+    ): List<ExercisePoint> {
+        val key = key(name, unit)
         return workouts
             .mapNotNull { (day, exercises) ->
-                val sets = exercises.filter { key(it.name) == key }.flatMap { it.sets }
+                val sets = exercises.filter { key(it) == key }.flatMap { it.sets }
                 best(sets)?.let { ExercisePoint(day, it, volume(sets)) }
             }
             .sortedBy { it.day }
     }
 
-    /** "3 × 10 · 40 kg", "3 × 8-10 · 20-25 kg", "3 × 12" for bodyweight. */
-    fun describe(sets: List<WorkoutSet>): String {
+    /** "3 × 10 · 40 kg", "3 × 8-10 · 20-25 kg", "3 × 10 · 4 discos", "3 × 12" for bodyweight. */
+    fun describe(sets: List<WorkoutSet>, unit: LoadUnit = LoadUnit.KG): String {
         if (sets.isEmpty()) return "Sin series"
         val reps = sets.map { it.reps }
         val repText = if (reps.distinct().size == 1) "${reps.first()}" else "${reps.min()}-${reps.max()}"
         val weights = sets.map { it.weight }.filter { it > 0 }
         val weightText = when {
             weights.isEmpty() -> ""
-            weights.distinct().size == 1 -> " · ${formatKg(weights.first())} kg"
-            else -> " · ${formatKg(weights.min())}-${formatKg(weights.max())} kg"
+            weights.distinct().size == 1 -> " · ${unit.format(weights.first())}"
+            else -> " · ${formatKg(weights.min())}-${unit.format(weights.max())}"
         }
         return "${sets.size} × $repText$weightText"
     }

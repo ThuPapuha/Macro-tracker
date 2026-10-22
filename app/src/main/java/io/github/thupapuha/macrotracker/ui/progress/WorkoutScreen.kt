@@ -70,6 +70,10 @@ class WorkoutViewModel(
     var loaded by mutableStateOf(false)
         private set
 
+    /** Section of the routine (Hipertrofia, Fuerza...), shown and saved with the workout. */
+    var section by mutableStateOf<String?>(null)
+        private set
+
     /** Best lift ever per exercise (by [Gym.key]) before this workout. */
     var records by mutableStateOf<Map<String, BestLift>>(emptyMap())
         private set
@@ -93,11 +97,13 @@ class WorkoutViewModel(
                 routineId = draft.routineId
                 date = draft.date
                 startedAt = draft.startedAt
+                section = draft.section
                 exercises = draft.exercises.map(EditableExercise::from)
             } else {
                 val routine = requestedRoutineId?.let { repository.routine(it) }
                 title = routine?.name ?: "Entrenamiento libre"
                 routineId = routine?.id
+                section = repository.sectionName(routine?.sectionId)
                 startedAt = System.currentTimeMillis()
                 exercises = Gym.startFrom(routine?.exercises.orEmpty()).map(EditableExercise::from)
                 persist()
@@ -140,7 +146,7 @@ class WorkoutViewModel(
         viewModelScope.launch {
             saving = true
             persistJob?.cancel()
-            val workout = repository.finishWorkout(title, routineId, logs, LocalDate.parse(date), startedAt)
+            val workout = repository.finishWorkout(title, routineId, logs, LocalDate.parse(date), startedAt, section)
             if (workout == null) {
                 error = "Marca al menos una serie con repeticiones como hecha."
             } else {
@@ -168,7 +174,7 @@ class WorkoutViewModel(
     }
 
     private suspend fun persist() {
-        settings.setActiveWorkout(ActiveWorkout(title, routineId, date, startedAt, exercises.map { it.toLog() }))
+        settings.setActiveWorkout(ActiveWorkout(title, routineId, date, startedAt, exercises.map { it.toLog() }, section))
     }
 }
 
@@ -207,7 +213,11 @@ fun WorkoutScreen(routineId: String?, onDone: () -> Unit) {
                         Text(vm.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (vm.loaded) {
                             Text(
-                                "⏱ ${elapsed(vm.startedAt, now)} · ${vm.doneSets}/${vm.totalSets} series",
+                                listOfNotNull(
+                                    vm.section,
+                                    "⏱ ${elapsed(vm.startedAt, now)}",
+                                    "${vm.doneSets}/${vm.totalSets} series",
+                                ).joinToString(" · "),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -266,7 +276,7 @@ fun WorkoutScreen(routineId: String?, onDone: () -> Unit) {
                 ExerciseCard(
                     exercise = exercise,
                     training = true,
-                    record = vm.records[Gym.key(exercise.name)],
+                    record = vm.records[Gym.key(exercise.name, exercise.unit)],
                     onChange = { vm.update(index, it) },
                     onRemove = { vm.remove(index) },
                 )
