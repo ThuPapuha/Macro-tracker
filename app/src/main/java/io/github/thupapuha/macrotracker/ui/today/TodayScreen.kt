@@ -50,6 +50,8 @@ import io.github.thupapuha.macrotracker.MacroTrackerApp
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.model.Macros
 import io.github.thupapuha.macrotracker.core.model.MealType
+import io.github.thupapuha.macrotracker.core.nutrition.WeekSummary
+import io.github.thupapuha.macrotracker.core.nutrition.WeeklyBudget
 import io.github.thupapuha.macrotracker.data.FoodEntry
 import io.github.thupapuha.macrotracker.data.FoodRepository
 import io.github.thupapuha.macrotracker.data.ProgressRepository
@@ -57,11 +59,13 @@ import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.WeightEntry
 import io.github.thupapuha.macrotracker.data.macros
 import io.github.thupapuha.macrotracker.data.mealType
+import io.github.thupapuha.macrotracker.data.toIntake
 import io.github.thupapuha.macrotracker.ui.common.Avatar
 import io.github.thupapuha.macrotracker.ui.common.FoodDraft
 import io.github.thupapuha.macrotracker.ui.common.FoodEditDialog
 import io.github.thupapuha.macrotracker.ui.common.MacroSummaryCard
 import io.github.thupapuha.macrotracker.ui.common.UpdateBanner
+import io.github.thupapuha.macrotracker.ui.common.WeekCard
 import io.github.thupapuha.macrotracker.ui.common.appViewModel
 import io.github.thupapuha.macrotracker.ui.common.dayLabel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
@@ -71,6 +75,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -128,6 +133,18 @@ class TodayViewModel(
         .map { it.targets }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Budget of the week of the day shown (null without calorie goals). */
+    val week: StateFlow<WeekSummary?> = date
+        .flatMapLatest { day ->
+            val start = WeeklyBudget.weekStart(day)
+            combine(repository.observeTotals(start, start.plusDays(6)), settings.settings.map { it.targets }) { totals, goals ->
+                goals?.takeIf { it.calories > 0 }?.let {
+                    WeeklyBudget.summarize(totals.map { t -> t.toIntake() }, it, day, LocalDate.now())
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     fun shiftDay(days: Long) {
         date.value = date.value.plusDays(days)
     }
@@ -165,6 +182,7 @@ fun TodayScreen(
     val date by vm.date.collectAsStateWithLifecycle()
     val entries by vm.entries.collectAsStateWithLifecycle()
     val targets by vm.targets.collectAsStateWithLifecycle()
+    val week by vm.week.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
     val isToday = date == LocalDate.now()
     val updater = (LocalContext.current.applicationContext as MacroTrackerApp).container.updater
@@ -246,6 +264,7 @@ fun TodayScreen(
             item(key = "summary") {
                 MacroSummaryCard(Macros.sum(entries.map { it.macros }), targets)
             }
+            week?.let { summary -> item(key = "week") { WeekCard(summary) } }
             if (targets == null) {
                 item(key = "no-targets") {
                     Card(

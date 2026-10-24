@@ -14,7 +14,9 @@ import androidx.room.RoomDatabase
 import androidx.room.Update
 import io.github.thupapuha.macrotracker.core.model.Macros
 import io.github.thupapuha.macrotracker.core.model.MealType
+import io.github.thupapuha.macrotracker.core.nutrition.DayIntake
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 @Entity(tableName = "food_entries", indices = [Index("date")])
 data class FoodEntry(
@@ -48,6 +50,8 @@ data class DayTotals(
 )
 
 val DayTotals.macros: Macros get() = Macros(calories, protein, carbs, fat)
+
+fun DayTotals.toIntake() = DayIntake(LocalDate.parse(date), macros, entries)
 
 @Dao
 interface FoodDao {

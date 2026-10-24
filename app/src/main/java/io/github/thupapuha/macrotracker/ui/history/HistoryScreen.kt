@@ -37,11 +37,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.model.Macros
+import io.github.thupapuha.macrotracker.core.nutrition.WeekSummary
+import io.github.thupapuha.macrotracker.core.nutrition.WeeklyBudget
 import io.github.thupapuha.macrotracker.data.DayTotals
 import io.github.thupapuha.macrotracker.data.FoodRepository
 import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.macros
+import io.github.thupapuha.macrotracker.data.toIntake
 import io.github.thupapuha.macrotracker.ui.common.MacroBars
+import io.github.thupapuha.macrotracker.ui.common.WeekRow
 import io.github.thupapuha.macrotracker.ui.common.appViewModel
 import io.github.thupapuha.macrotracker.ui.common.dayLabel
 import io.github.thupapuha.macrotracker.ui.common.formatAmount
@@ -50,6 +54,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -75,6 +80,18 @@ class HistoryViewModel(repository: FoodRepository, settings: SettingsStore) : Vi
         .map { it.targets }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** This week and the 3 before it against the weekly budget, newest first. */
+    val weeks: StateFlow<List<WeekSummary>> = LocalDate.now().let { today ->
+        combine(
+            repository.observeTotals(WeeklyBudget.weekStart(today).minusWeeks(3), today),
+            settings.settings.map { it.targets },
+        ) { totals, goals ->
+            goals?.takeIf { it.calories > 0 }
+                ?.let { WeeklyBudget.lastWeeks(totals.map { t -> t.toIntake() }, it, today, 4) }
+                .orEmpty()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private fun fillDays(from: LocalDate, to: LocalDate, totals: List<DayTotals>): List<HistoryDay> {
         val byDate = totals.associateBy { it.date }
         return generateSequence(from) { it.plusDays(1) }
@@ -93,6 +110,7 @@ fun HistoryScreen(onOpenDay: (LocalDate) -> Unit) {
     val range by vm.range.collectAsStateWithLifecycle()
     val days by vm.days.collectAsStateWithLifecycle()
     val targets by vm.targets.collectAsStateWithLifecycle()
+    val weeks by vm.weeks.collectAsStateWithLifecycle()
 
     val logged = days.filter { it.entries > 0 }
     val average = if (logged.isEmpty()) Macros.ZERO else Macros.sum(logged.map { it.totals }) * (1.0 / logged.size)
@@ -168,6 +186,23 @@ fun HistoryScreen(onOpenDay: (LocalDate) -> Unit) {
                             )
                         }
                         MacroBars(average, targets)
+                    }
+                }
+            }
+            if (weeks.isNotEmpty()) {
+                item(key = "weeks") {
+                    ElevatedCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Por semana", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Tu meta semanal es tu meta diaria × 7. En verde, lo que quedó por debajo; " +
+                                    "en la semana actual, el margen que puedes usar.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            val today = LocalDate.now()
+                            weeks.forEach { week -> WeekRow(week, today) }
+                        }
                     }
                 }
             }
