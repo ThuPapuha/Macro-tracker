@@ -35,6 +35,7 @@ struct AddFoodView: View {
         .background(AppColor.background.ignoresSafeArea())
         .navigationTitle("Agregar · \(dayLabel(date))")
         .navigationBarTitleDisplayMode(.inline)
+        .keyboardDoneButton()
     }
 }
 

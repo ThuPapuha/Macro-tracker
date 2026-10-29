@@ -31,7 +31,9 @@ final class AppModel {
         let sessionStore = KeychainSessionStore()
         let ref = Bundle.main.object(forInfoDictionaryKey: "SupabaseProjectRef") as? String ?? ""
         let key = Bundle.main.object(forInfoDictionaryKey: "SupabaseAnonKey") as? String ?? ""
-        let configured = !ref.isEmpty && !key.isEmpty && !ref.contains("$(")
+        // UI tests run without the server so they never create accounts on it.
+        let uiTesting = ProcessInfo.processInfo.arguments.contains("-uiTesting")
+        let configured = !ref.isEmpty && !key.isEmpty && !ref.contains("$(") && !uiTesting
         let client = configured ? SupabaseClient(baseURL: "https://\(ref).supabase.co", anonKey: key, store: sessionStore) : nil
         let groupAPI = client.map { GroupAPI(client: $0) }
 

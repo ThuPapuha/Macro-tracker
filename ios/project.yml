@@ -43,12 +43,26 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).tests
         DEVELOPMENT_TEAM: $(APP_TEAM_ID)
+  MacroTrackerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MacroTrackerUITests
+    dependencies:
+      - target: MacroTracker
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).uitests
+        DEVELOPMENT_TEAM: $(APP_TEAM_ID)
 schemes:
   MacroTracker:
     build:
       targets:
         MacroTracker: all
         MacroTrackerTests: [test]
+        MacroTrackerUITests: [test]
     test:
       targets:
         - MacroTrackerTests
+        - MacroTrackerUITests

@@ -321,6 +321,7 @@ struct NumberField: View {
             TextField(placeholder ?? "0", text: $text)
                 .keyboardType(.decimalPad)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier(label)
                 .onChange(of: text) { _, new in
                     let filtered = String(new.filter { $0.isNumber || $0 == "." || $0 == "," }.prefix(7))
                     if filtered != new { text = filtered }

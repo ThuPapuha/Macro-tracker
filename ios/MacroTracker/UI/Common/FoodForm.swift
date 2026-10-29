@@ -130,6 +130,7 @@ struct FoodEditSheet: View {
             }
             .navigationTitle("Editar alimento")
             .navigationBarTitleDisplayMode(.inline)
+            .keyboardDoneButton()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
