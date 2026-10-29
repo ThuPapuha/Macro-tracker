@@ -91,10 +91,10 @@ final class GymTests: XCTestCase {
             BodyLog(day: "2026-10-10", kg: 82, fatPercent: 20, musclePercent: 40),
             BodyLog(day: "2026-10-15", kg: 81),
         ]
-        XCTAssertEqual(Body.trend(logs, .fat)!.change!, -2, accuracy: 1e-9)
-        XCTAssertNil(Body.trend(logs, .muscle)!.change)
-        XCTAssertEqual(Body.series(logs, .weight).map(\.1), [82, 81, 80])
-        XCTAssertEqual(Body.chartable(logs), [.weight, .fat])
+        XCTAssertEqual(BodyStats.trend(logs, .fat)!.change!, -2, accuracy: 1e-9)
+        XCTAssertNil(BodyStats.trend(logs, .muscle)!.change)
+        XCTAssertEqual(BodyStats.series(logs, .weight).map(\.1), [82, 81, 80])
+        XCTAssertEqual(BodyStats.chartable(logs), [.weight, .fat])
         XCTAssertEqual(logs[0].fatMassKg!, 14.4, accuracy: 1e-9)
     }
 }

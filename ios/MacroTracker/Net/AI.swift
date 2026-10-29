@@ -143,7 +143,7 @@ enum GeminiTransport {
 
 struct AIService {
     /// Picks the transport for each request (the user may add or remove their own key).
-    let transport: () throws -> GeminiTransport
+    let transport: @MainActor () throws -> GeminiTransport
 
     func estimateMeal(description: String, image: AIPart? = nil) async throws -> MealEstimate {
         let text = description.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,7 +183,8 @@ struct AIService {
         ]
         let result: HTTPResult
         do {
-            result = try await transport().send(body.data)
+            let route = try await transport()
+            result = try await route.send(body.data)
         } catch let error as BackendError {
             throw AIError(message: error.message)
         } catch let error as AIError {

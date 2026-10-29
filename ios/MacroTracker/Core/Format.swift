@@ -7,7 +7,8 @@ func formatAmount(_ value: Double) -> String {
     if abs(value) >= 100 || value == value.rounded(.down) {
         return String(Int(value.rounded()))
     }
-    return String(format: "%.1f", locale: spanish, value)
+    // Half-up like Java's String.format (printf would turn 12.25 into "12,2").
+    return String(format: "%.1f", locale: spanish, (value * 10).rounded() / 10)
 }
 
 /// Value for an editable field: no thousands separators, dot decimals.

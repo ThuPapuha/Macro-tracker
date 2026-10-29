@@ -65,7 +65,7 @@ struct MetricTrend {
     var change: Double? { previous.map { current - $0 } }
 }
 
-enum Body {
+enum BodyStats {
     /// Values of [metric] in [logs] (any order), oldest first, skipping days it was not measured.
     static func series(_ logs: [BodyLog], _ metric: BodyMetric) -> [(String, Double)] {
         logs.sorted { $0.day < $1.day }.compactMap { log in metric.of(log).map { (log.day, $0) } }
