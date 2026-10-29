@@ -1,0 +1,18 @@
+// Build settings of the iOS app.
+// To publish it, change APP_BUNDLE_ID to an identifier of your Apple account and set APP_TEAM_ID
+// (or create Config/Local.xcconfig with those two lines, which git ignores).
+
+APP_BUNDLE_ID = io.github.thupapuha.macrotracker
+APP_TEAM_ID =
+
+// Version shown in the App Store, and build number (raise it on every upload).
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1
+
+// Same server as the Android app. The publishable key is meant to be public (it is inside the APK too);
+// the database only allows the functions in supabase/schema.sql.
+SUPABASE_PROJECT_REF = kcqfoizwpiqhhilaanpw
+SUPABASE_ANON_KEY = sb_publishable_ZyvdIyHtcKk29mOkLhfBBw_jiFMfSsJ
+GEMINI_MODEL = gemini-3.5-flash-lite
+
+#include? "Local.xcconfig"
