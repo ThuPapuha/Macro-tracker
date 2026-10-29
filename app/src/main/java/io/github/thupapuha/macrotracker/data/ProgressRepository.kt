@@ -195,6 +195,14 @@ class ProgressRepository(private val dao: ProgressDao) {
 
     // Syncing with the groups' server.
 
+    /** Everything goes up again with the next account (e.g. after deleting the old one). */
+    suspend fun markAllUnsynced() {
+        dao.purgeDeletedWorkouts()
+        dao.markWorkoutsUnsynced()
+        dao.purgeDeletedWeights()
+        dao.markWeightsUnsynced()
+    }
+
     suspend fun pendingWorkouts(): List<WorkoutEntity> = dao.pendingWorkouts()
 
     suspend fun markWorkoutSynced(workout: WorkoutEntity) {

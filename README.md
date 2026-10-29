@@ -1,6 +1,6 @@
 # Macro Tracker
 
-App Android para registrar los macros de tus comidas día a día, con grupos para seguir el progreso junto a tus amigos y objetivos automáticos a partir de un documento (plan de tu nutricionista, InBody, análisis, etc.). La IA usa **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`), cuyo plan gratis permite muchas más consultas diarias que Gemini Flash.
+App para Android y iPhone para registrar los macros de tus comidas día a día, con grupos para seguir el progreso junto a tus amigos y objetivos automáticos a partir de un documento (plan de tu nutricionista, InBody, análisis, etc.). La IA usa **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`), cuyo plan gratis permite muchas más consultas diarias que Gemini Flash.
 
 ## Qué hace
 
@@ -89,11 +89,15 @@ Tus comidas se guardan en el teléfono. Para no perderlas:
 
 La app revisa las Releases de este repositorio al abrirse (como máximo cada 6 horas), usando el archivo `version.json` que se publica con cada versión. Si hay una versión nueva, muestra un aviso con el botón **Actualizar**: la descarga y abre el instalador de Android, que siempre pide confirmar. La primera vez, Android te pide permitir que Macro Tracker instale apps. También puedes buscar a mano en *Perfil → Buscar actualización*.
 
+## iPhone
+
+Hay una app nativa para iPhone en [`ios/`](ios/README.md), con las mismas funciones. Usa el mismo servidor, así que los grupos mezclan amigos con Android y con iPhone, y los respaldos sirven en las dos. La guía para compilarla y subirla a TestFlight o a la App Store desde una Mac está en [`ios/README.md`](ios/README.md). Política de privacidad: [`PRIVACY.md`](PRIVACY.md).
+
 ## Notas
 
 - **Sin Supabase** la app igual funciona para registrar comidas. Para la IA puedes poner tu propia clave en *Perfil → Usar mi propia clave*; queda guardada solo en ese teléfono.
 - **Llave de firma privada (opcional)**: la llave del repo es pública. Si prefieres una propia, agrega los secretos `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`. Cambiar de llave obliga a desinstalar la versión anterior una vez.
-- **Identidad**: cada instalación es un usuario anónimo. Si desinstalas la app, vuelve a unirte a tus grupos con el código.
+- **Identidad**: cada instalación es un usuario anónimo. Si desinstalas la app, vuelve a unirte a tus grupos con el código. Para borrar tu usuario y todo lo que compartiste: *Perfil → Borrar mi cuenta de grupos*.
 - Si el login anónimo no se activó solo, actívalo en Supabase: *Authentication → Sign In / Providers → Allow anonymous sign-ins*.
 - Los proyectos gratis de Supabase se pausan tras una semana sin uso. Con el uso diario no pasa; si ocurre, vuelve a correr el workflow y lo reactiva.
 
@@ -102,3 +106,4 @@ La app revisa las Releases de este repositorio al abrirse (como máximo cada 6 h
 - `core/`: lógica en Kotlin puro (cálculos de nutrición y de gym, cliente de Gemini y de Supabase) con pruebas: `./gradlew :core:test`
 - `app/`: interfaz en Jetpack Compose, bases locales Room (`macro-tracker.db` para comidas y `progress.db` para rutinas, entrenamientos y peso). Compilar: `./gradlew :app:assembleRelease`. Para apuntar a tu Supabase en local, define `SUPABASE_URL` y `SUPABASE_ANON_KEY` en `local.properties`.
 - `supabase/`: esquema SQL y la función que llama a Gemini.
+- `ios/`: la app de iPhone en SwiftUI (ver [`ios/README.md`](ios/README.md)). Las funciones nuevas hay que hacerlas en las dos apps.

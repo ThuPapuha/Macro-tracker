@@ -3,7 +3,8 @@ name: Build & deploy
 on:
   push:
     branches: ["**"]
-    paths-ignore: ["**.md"]
+    # The iOS app has its own workflow; its changes do not need a new APK.
+    paths-ignore: ["**.md", "ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 
 concurrency:

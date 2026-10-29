@@ -124,6 +124,18 @@ interface ProgressDao {
     @Query("DELETE FROM workouts WHERE id = :id AND deleted = 1")
     suspend fun purgeWorkout(id: String)
 
+    @Query("DELETE FROM workouts WHERE deleted = 1")
+    suspend fun purgeDeletedWorkouts()
+
+    @Query("UPDATE workouts SET synced = 0")
+    suspend fun markWorkoutsUnsynced()
+
+    @Query("DELETE FROM weights WHERE deleted = 1")
+    suspend fun purgeDeletedWeights()
+
+    @Query("UPDATE weights SET synced = 0")
+    suspend fun markWeightsUnsynced()
+
     @Query("SELECT * FROM weights WHERE deleted = 0 ORDER BY date")
     fun observeWeights(): Flow<List<WeightEntity>>
 

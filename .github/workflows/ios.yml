@@ -1,0 +1,80 @@
+name: iOS
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & test (simulator, unsigned)
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: |
+          # Newest Xcode 16+ installed on the runner.
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build and run unit tests
+        run: |
+          # First available iPhone simulator.
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime, items in sorted(devices.items(), reverse=True):
+              if "iOS" not in runtime:
+                  continue
+              for d in items:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"]); sys.exit()
+          ')
+          echo "Simulator: $udid"
+          set -o pipefail
+          xcodebuild test \
+            -project MacroTracker.xcodeproj \
+            -scheme MacroTracker \
+            -destination "id=$udid" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E "error:|warning: .*(deprecated|will never)|Test Case .* (passed|failed)|\*\* (BUILD|TEST) " || true
+          grep -q "\*\* TEST SUCCEEDED \*\*" build.log
+
+      - name: Build for device (Release, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project MacroTracker.xcodeproj \
+            -scheme MacroTracker \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee release.log | grep -E "error:|\*\* BUILD " || true
+          grep -q "\*\* BUILD SUCCEEDED \*\*" release.log
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: ios/*.log
