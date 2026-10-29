@@ -69,10 +69,12 @@ import io.github.thupapuha.macrotracker.core.nutrition.Sex
 import io.github.thupapuha.macrotracker.core.supabase.GroupApi
 import io.github.thupapuha.macrotracker.data.BackupManager
 import io.github.thupapuha.macrotracker.data.MediaReader
+import io.github.thupapuha.macrotracker.data.ProgressRepository
 import io.github.thupapuha.macrotracker.data.SettingsStore
 import io.github.thupapuha.macrotracker.data.UpdateState
 import io.github.thupapuha.macrotracker.data.UserSettings
 import io.github.thupapuha.macrotracker.ui.common.Avatar
+import io.github.thupapuha.macrotracker.ui.common.ConfirmDialog
 import io.github.thupapuha.macrotracker.ui.common.ErrorText
 import io.github.thupapuha.macrotracker.ui.common.NumberField
 import io.github.thupapuha.macrotracker.ui.common.TextInputDialog
@@ -106,6 +108,7 @@ class ProfileViewModel(
     private val media: MediaReader,
     private val backup: BackupManager,
     private val groupApi: GroupApi?,
+    private val progress: ProgressRepository,
     val serverConfigured: Boolean,
 ) : ViewModel() {
     val autoBackupSupported = backup.autoBackupSupported
@@ -228,11 +231,35 @@ class ProfileViewModel(
     fun setShareMeals(value: Boolean) {
         viewModelScope.launch { settings.setShareMeals(value) }
     }
+
+    var deletingAccount by mutableStateOf(false)
+        private set
+
+    /** Deletes the groups account on the server; the food log and workouts stay on the phone. */
+    fun deleteAccount() {
+        val api = groupApi ?: return
+        viewModelScope.launch {
+            deletingAccount = true
+            error = null
+            try {
+                api.deleteMyAccount()
+                settings.forgetGroups()
+                progress.markAllUnsynced()
+                avatarSeed = ""
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = e.message ?: "No se pudo borrar la cuenta"
+            } finally {
+                deletingAccount = false
+            }
+        }
+    }
 }
 
 @Composable
 fun ProfileScreen() {
-    val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.backup, it.groupApi, it.serverConfigured) }
+    val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.backup, it.groupApi, it.progressRepository, it.serverConfigured) }
     val state by vm.state.collectAsStateWithLifecycle()
     val updater = (LocalContext.current.applicationContext as MacroTrackerApp).container.updater
     val updateState by updater.state.collectAsStateWithLifecycle()
@@ -383,6 +410,23 @@ fun ProfileScreen() {
                 onExport = { exportBackup.launch("macrotracker-respaldo-${LocalDate.now()}.json") },
                 onImport = { importBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream", "*/*")) },
             )
+
+            if (vm.serverConfigured) {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Cuenta de grupos", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Al unirte a un grupo se crea una cuenta anónima en el servidor (sin correo ni contraseña). " +
+                                "Puedes borrarla junto con todo lo que compartiste.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(onClick = { dialog = "delete-account" }, enabled = !vm.deletingAccount) {
+                            Text(if (vm.deletingAccount) "Borrando…" else "Borrar mi cuenta de grupos")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -436,6 +480,18 @@ fun ProfileScreen() {
             onConfirm = { profile, targets ->
                 vm.applyCalculator(profile, targets)
                 dialog = null
+            },
+        )
+        "delete-account" -> ConfirmDialog(
+            title = "Borrar mi cuenta de grupos",
+            message = "Se borran del servidor tu usuario, lo que compartiste con tus grupos (resúmenes, entrenamientos, " +
+                "peso, comentarios y reacciones) y los grupos que creaste si no tienen más miembros. Tus comidas y " +
+                "entrenamientos en este teléfono no se borran.",
+            confirmLabel = "Borrar",
+            onDismiss = { dialog = null },
+            onConfirm = {
+                dialog = null
+                vm.deleteAccount()
             },
         )
         "gemini" -> GeminiDialog(

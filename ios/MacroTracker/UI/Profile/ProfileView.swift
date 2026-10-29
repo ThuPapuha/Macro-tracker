@@ -112,7 +112,7 @@ struct ProfileView: View {
             Button("Borrar", role: .destructive) { deleteAccount() }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("Se borran del servidor tu usuario, lo que compartiste con tus grupos (resúmenes, entrenamientos, peso, comentarios y reacciones) y los grupos que creaste. Tus comidas y entrenamientos en este teléfono no se borran.")
+            Text("Se borran del servidor tu usuario, lo que compartiste con tus grupos (resúmenes, entrenamientos, peso, comentarios y reacciones) y los grupos que creaste si no tienen más miembros. Tus comidas y entrenamientos en este teléfono no se borran.")
         }
     }
 

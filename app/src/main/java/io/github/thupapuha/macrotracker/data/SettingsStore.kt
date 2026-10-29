@@ -185,6 +185,17 @@ class SettingsStore(context: Context) {
         store.edit { it[Keys.lastGroupId] = groupId }
     }
 
+    /** After deleting the groups account: back to a phone-only install. */
+    suspend fun forgetGroups() {
+        store.edit {
+            it[Keys.hasGroups] = false
+            it[Keys.lastGroupId] = ""
+            it[Keys.displayNameSynced] = false
+            it[Keys.weightGoalSynced] = false
+            it.remove(Keys.activitySeen)
+        }
+    }
+
     suspend fun setNotifyGroupActivity(value: Boolean) {
         store.edit { it[Keys.notifyGroupActivity] = value }
     }

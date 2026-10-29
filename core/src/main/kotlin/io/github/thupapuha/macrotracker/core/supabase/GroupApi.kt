@@ -301,6 +301,12 @@ class GroupApi(private val client: SupabaseClient) {
         client.rpc("leave_group", buildJsonObject { put("p_group", groupId) })
     }
 
+    /** Deletes the anonymous user and everything shared with the groups, then forgets the session. */
+    suspend fun deleteMyAccount() {
+        client.rpc("delete_my_account")
+        client.clearSession()
+    }
+
     suspend fun members(groupId: String): List<GroupMember> = decode(
         ListSerializer(GroupMember.serializer()),
         client.rpc("group_members_list", buildJsonObject { put("p_group", groupId) }),

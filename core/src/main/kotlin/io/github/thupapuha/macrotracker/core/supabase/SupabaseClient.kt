@@ -84,6 +84,12 @@ class SupabaseClient(
         cached = session
     }
 
+    /** Forgets the session (after deleting the account); the next request signs up again. */
+    suspend fun clearSession() = mutex.withLock {
+        store.save(null)
+        cached = null
+    }
+
     suspend fun rpc(function: String, args: JsonObject = JsonObject(emptyMap())): String {
         val result = authorized {
             Request.Builder()

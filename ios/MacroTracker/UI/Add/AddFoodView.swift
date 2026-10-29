@@ -151,10 +151,10 @@ private struct AITab: View {
             do {
                 let part = image?.jpegForAI().map { AIPart.inline("image/jpeg", $0) }
                 let estimate = try await app.ai.estimateMeal(description: description, image: part)
-                results = estimate.items.map(FoodDraft.init)
+                results = estimate.items.map { FoodDraft($0) }
                 notes = estimate.notes
             } catch {
-                self.error = error.localizedDescription
+                self.error = friendlyMessage(error, "No se pudo analizar la comida")
             }
         }
     }

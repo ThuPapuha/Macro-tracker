@@ -257,6 +257,21 @@ begin
   end if;
 end $$;
 
+-- Borra la cuenta del usuario (lo pide la App Store). Primero sale de sus grupos para que los
+-- grupos con más miembros sigan con otro dueño; el resto (perfil, resúmenes, comentarios,
+-- reacciones, peso, entrenamientos, uso de IA) se borra en cascada con auth.users.
+create or replace function public.delete_my_account() returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := public.require_uid();
+  gid uuid;
+begin
+  for gid in select m.group_id from group_members m where m.user_id = uid loop
+    perform public.leave_group(gid);
+  end loop;
+  delete from auth.users u where u.id = uid;
+end $$;
+
 create or replace function public.my_groups() returns json
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -847,6 +862,7 @@ revoke all on function public.set_profile(text) from public, anon;
 revoke all on function public.create_group(text) from public, anon;
 revoke all on function public.join_group(text) from public, anon;
 revoke all on function public.leave_group(uuid) from public, anon;
+revoke all on function public.delete_my_account() from public, anon;
 revoke all on function public.my_groups() from public, anon;
 revoke all on function public.group_members_list(uuid) from public, anon;
 revoke all on function public.group_summaries(uuid, date, date) from public, anon;
@@ -874,6 +890,7 @@ grant execute on function public.set_profile(text) to authenticated;
 grant execute on function public.create_group(text) to authenticated;
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
+grant execute on function public.delete_my_account() to authenticated;
 grant execute on function public.my_groups() to authenticated;
 grant execute on function public.group_members_list(uuid) to authenticated;
 grant execute on function public.group_summaries(uuid, date, date) to authenticated;
