@@ -64,7 +64,7 @@ jobs:
 
       - name: Deploy Edge Function
         if: steps.config.outputs.ready == 'true'
-        run: supabase functions deploy gemini --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+        run: supabase functions deploy gemini --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --yes
 
       - name: Smoke test (login, database, Gemini)
         if: steps.config.outputs.ready == 'true'
