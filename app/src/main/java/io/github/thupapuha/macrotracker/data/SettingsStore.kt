@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.github.thupapuha.macrotracker.core.gym.ExerciseLog
 import io.github.thupapuha.macrotracker.core.gym.WeightGoal
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import java.io.IOException
+import java.time.LocalDate
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -51,6 +53,11 @@ data class UserSettings(
     /** Show my weight and its goal to my groups. */
     val shareWeight: Boolean = true,
     val weightGoalSynced: Boolean = false,
+    val creatineDays: Set<LocalDate> = emptySet(),
+    val creatineDosesByDay: Map<LocalDate, Int> = emptyMap(),
+    val creatineDoseGrams: Int = 5,
+    val remindCreatine: Boolean = false,
+    val creatineReminderMinute: Int = 20 * 60,
 )
 
 /** A workout in progress, kept so closing the app at the gym does not lose it. */
@@ -113,6 +120,12 @@ class SettingsStore(context: Context) {
         val shareWeight = booleanPreferencesKey("share_weight")
         val weightGoalSynced = booleanPreferencesKey("weight_goal_synced")
         val activeWorkout = stringPreferencesKey("active_workout")
+        val creatineDays = stringSetPreferencesKey("creatine_days")
+        val creatineDoses = stringSetPreferencesKey("creatine_doses")
+        val creatineDoseGrams = intPreferencesKey("creatine_dose_grams")
+        val remindCreatine = booleanPreferencesKey("remind_creatine")
+        val creatineReminderMinute = intPreferencesKey("creatine_reminder_minute")
+        val creatineReminderSentDay = stringPreferencesKey("creatine_reminder_sent_day")
     }
 
     private val preferences: Flow<Preferences> = store.data.catch { e ->
@@ -144,6 +157,11 @@ class SettingsStore(context: Context) {
             weightGoal = p[Keys.weightGoal]?.let { goal -> WeightGoal(start = p[Keys.weightStart] ?: goal, goal = goal) },
             shareWeight = p[Keys.shareWeight] ?: true,
             weightGoalSynced = p[Keys.weightGoalSynced] ?: false,
+            creatineDays = p[Keys.creatineDays].orEmpty().mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }.toSet(),
+            creatineDosesByDay = parseCreatineDoses(p[Keys.creatineDoses].orEmpty()),
+            creatineDoseGrams = p[Keys.creatineDoseGrams]?.takeIf { it in listOf(3, 5, 10, 20) } ?: 5,
+            remindCreatine = p[Keys.remindCreatine] ?: false,
+            creatineReminderMinute = p[Keys.creatineReminderMinute]?.takeIf { it in 0 until 24 * 60 } ?: 20 * 60,
         )
     }
 
@@ -217,6 +235,61 @@ class SettingsStore(context: Context) {
             it[Keys.weightGoalSynced] = false
         }
     }
+
+    suspend fun setCreatineTaken(day: LocalDate, taken: Boolean, doseGrams: Int = 5) {
+        require(!day.isAfter(LocalDate.now()))
+        store.edit { preferences ->
+            val days = preferences[Keys.creatineDays].orEmpty().toMutableSet()
+            if (taken) days.add(day.toString()) else days.remove(day.toString())
+            preferences[Keys.creatineDays] = days
+            val doses = parseCreatineDoses(preferences[Keys.creatineDoses].orEmpty()).toMutableMap()
+            if (taken) doses[day] = doseGrams.takeIf { it in listOf(3, 5, 10, 20) } ?: 5 else doses.remove(day)
+            preferences[Keys.creatineDoses] = doses.mapTo(mutableSetOf()) { (date, grams) -> "$date|$grams" }
+        }
+    }
+
+    suspend fun setCreatineDose(grams: Int) {
+        require(grams in listOf(3, 5, 10, 20))
+        store.edit { it[Keys.creatineDoseGrams] = grams }
+    }
+
+    suspend fun setRemindCreatine(enabled: Boolean) {
+        store.edit { it[Keys.remindCreatine] = enabled }
+    }
+
+    suspend fun setCreatineReminderMinute(minute: Int) {
+        require(minute in 0 until 24 * 60)
+        store.edit { it[Keys.creatineReminderMinute] = minute }
+    }
+
+    suspend fun creatineReminderSentDay(): LocalDate? = preferences.first()[Keys.creatineReminderSentDay]
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
+    suspend fun markCreatineReminderSent(day: LocalDate) {
+        store.edit { it[Keys.creatineReminderSentDay] = day.toString() }
+    }
+
+    suspend fun importCreatineDays(days: List<String>, importedDoses: Map<String, Int> = emptyMap()) {
+        val valid = days.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+            .filterNot { it.isAfter(LocalDate.now()) }.toSet()
+        if (valid.isEmpty()) return
+        store.edit { preferences ->
+            preferences[Keys.creatineDays] = preferences[Keys.creatineDays].orEmpty() + valid.map { it.toString() }
+            val doses = parseCreatineDoses(preferences[Keys.creatineDoses].orEmpty()).toMutableMap()
+            for (day in valid) {
+                val grams = importedDoses[day.toString()]
+                if (day !in doses && grams != null && grams in listOf(3, 5, 10, 20)) doses[day] = grams
+            }
+            preferences[Keys.creatineDoses] = doses.mapTo(mutableSetOf()) { (date, grams) -> "$date|$grams" }
+        }
+    }
+
+    private fun parseCreatineDoses(values: Set<String>): Map<LocalDate, Int> = values.mapNotNull { entry ->
+        val parts = entry.split('|')
+        val day = parts.firstOrNull()?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val grams = parts.getOrNull(1)?.toIntOrNull()
+        if (parts.size == 2 && day != null && grams != null && grams in listOf(3, 5, 10, 20)) day to grams else null
+    }.toMap()
 
     /** Marks the weight goal as uploaded, unless it changed while uploading. */
     suspend fun markWeightGoalSynced(uploaded: WeightGoal?, share: Boolean) {

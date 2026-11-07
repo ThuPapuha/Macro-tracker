@@ -12,6 +12,7 @@ class MacroTrackerApp : Application() {
         container.summarySync.start()
         container.progressSync.start()
         container.groupNotifier.start()
+        container.creatineReminder.start()
         container.backup.start()
     }
 }

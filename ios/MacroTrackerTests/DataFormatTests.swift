@@ -15,7 +15,9 @@ final class DataFormatTests: XCTestCase {
                       "pr":false,"note":"","unit":"plates"}],"position":0,"sectionId":"s1"}],
          "workouts":[{"id":"w1","date":"2026-10-21","title":"Pierna","exercises":[],"prCount":0,"finishedAt":9000,"section":"Hipertrofia"}],
          "weights":[{"date":"2026-10-21","kg":80.4,"fatPercent":18.5}],
-         "weightGoal":{"start":82.0,"goal":75.0},"shareWeight":false}
+         "weightGoal":{"start":82.0,"goal":75.0},"shareWeight":false,
+         "creatineDays":["2026-10-20","2026-10-21"],"creatineDoseGrams":10,
+         "creatineDoses":{"2026-10-20":5,"2026-10-21":10}}
         """
         let file = try Backups.decode(Data(json.utf8))
         XCTAssertEqual(file.entries.first?.name, "Avena")
@@ -27,6 +29,9 @@ final class DataFormatTests: XCTestCase {
         XCTAssertEqual(file.weights.first?.fatPercent, 18.5)
         XCTAssertEqual(file.weightGoal, WeightGoal(start: 82, goal: 75))
         XCTAssertFalse(file.shareWeight)
+        XCTAssertEqual(file.creatineDays, ["2026-10-20", "2026-10-21"])
+        XCTAssertEqual(file.creatineDoseGrams, 10)
+        XCTAssertEqual(file.creatineDoses, ["2026-10-20": 5, "2026-10-21": 10])
 
         // Round trip through our own encoder.
         let again = try Backups.decode(try Backups.encode(file))
@@ -40,6 +45,9 @@ final class DataFormatTests: XCTestCase {
         let old = try Backups.decode(Data("{\"app\":\"macro-tracker\",\"format\":1,\"exportedAt\":\"x\",\"entries\":[]}".utf8))
         XCTAssertTrue(old.routines.isEmpty && old.weights.isEmpty)
         XCTAssertTrue(old.shareWeight)
+        XCTAssertTrue(old.creatineDays.isEmpty)
+        XCTAssertEqual(old.creatineDoseGrams, 5)
+        XCTAssertTrue(old.creatineDoses.isEmpty)
     }
 
     func testMissingEntriesOnlyOnce() {

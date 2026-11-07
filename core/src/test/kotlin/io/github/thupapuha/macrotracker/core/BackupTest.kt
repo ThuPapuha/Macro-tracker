@@ -40,6 +40,9 @@ class BackupTest {
             weights = listOf(BackupWeight("2026-10-21", 80.4, 18.5, 41.0, 3.1), BackupWeight("2026-10-20", 80.9)),
             weightGoal = WeightGoal(82.0, 75.0),
             shareWeight = false,
+            creatineDays = listOf("2026-10-20", "2026-10-21"),
+            creatineDoseGrams = 10,
+            creatineDoses = mapOf("2026-10-20" to 5, "2026-10-21" to 10),
         )
         assertEquals(file, Backups.decode(Backups.encode(file)))
     }
@@ -51,6 +54,9 @@ class BackupTest {
         assertTrue(file.routines.isEmpty() && file.workouts.isEmpty() && file.weights.isEmpty() && file.sections.isEmpty())
         assertEquals(null, file.weightGoal)
         assertTrue(file.shareWeight)
+        assertTrue(file.creatineDays.isEmpty())
+        assertEquals(5, file.creatineDoseGrams)
+        assertTrue(file.creatineDoses.isEmpty())
     }
 
     @Test

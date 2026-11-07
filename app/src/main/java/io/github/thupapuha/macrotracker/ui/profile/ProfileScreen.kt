@@ -3,6 +3,7 @@
 package io.github.thupapuha.macrotracker.ui.profile
 
 import android.Manifest
+import android.app.TimePickerDialog
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -59,6 +60,7 @@ import io.github.thupapuha.macrotracker.BuildConfig
 import io.github.thupapuha.macrotracker.MacroTrackerApp
 import io.github.thupapuha.macrotracker.core.ai.AiService
 import io.github.thupapuha.macrotracker.core.ai.DocumentPreparer
+import io.github.thupapuha.macrotracker.core.gym.Creatine
 import io.github.thupapuha.macrotracker.core.model.MacroTargets
 import io.github.thupapuha.macrotracker.core.model.Macros
 import io.github.thupapuha.macrotracker.core.nutrition.ActivityLevel
@@ -101,6 +103,13 @@ private val documentTypes = arrayOf(
     "text/*",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 )
+
+private fun creatineTimeLabel(grams: Int): String = when (grams) {
+    3 -> "4–6 semanas"
+    10 -> "2–3 semanas"
+    20 -> "5–7 días"
+    else -> "3–4 semanas"
+}
 
 class ProfileViewModel(
     private val settings: SettingsStore,
@@ -228,6 +237,18 @@ class ProfileViewModel(
         viewModelScope.launch { settings.setNotifyGroupActivity(value) }
     }
 
+    fun setCreatineDose(grams: Int) {
+        viewModelScope.launch { settings.setCreatineDose(grams) }
+    }
+
+    fun setRemindCreatine(value: Boolean) {
+        viewModelScope.launch { settings.setRemindCreatine(value) }
+    }
+
+    fun setCreatineReminderMinute(minute: Int) {
+        viewModelScope.launch { settings.setCreatineReminderMinute(minute) }
+    }
+
     fun setShareMeals(value: Boolean) {
         viewModelScope.launch { settings.setShareMeals(value) }
     }
@@ -261,11 +282,15 @@ class ProfileViewModel(
 fun ProfileScreen() {
     val vm = appViewModel { ProfileViewModel(it.settings, it.ai, it.media, it.backup, it.groupApi, it.progressRepository, it.serverConfigured) }
     val state by vm.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val updater = (LocalContext.current.applicationContext as MacroTrackerApp).container.updater
     val updateState by updater.state.collectAsStateWithLifecycle()
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     var documentNote by rememberSaveable { mutableStateOf("") }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val creatineNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        vm.setRemindCreatine(granted)
+    }
     val exportBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) vm.exportBackup(uri)
     }
@@ -360,6 +385,50 @@ fun ProfileScreen() {
                                 }
                             },
                         )
+                    }
+                    HorizontalDivider()
+                    Text("Creatina", style = MaterialTheme.typography.bodyLarge)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Creatine.doses.forEach { grams ->
+                            FilterChip(
+                                selected = settings.creatineDoseGrams == grams,
+                                onClick = { vm.setCreatineDose(grams) },
+                                label = { Text(if (grams == 20) "20 g carga" else "$grams g") },
+                            )
+                        }
+                    }
+                    Text(
+                        "Tiempo orientativo para llenar la figura: ${creatineTimeLabel(settings.creatineDoseGrams)}. La dosis elegida se guarda en cada nueva toma.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Recordarme la creatina", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Aviso diario solo si no has registrado la toma antes de la hora elegida.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = settings.remindCreatine, onCheckedChange = { enabled ->
+                            if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                creatineNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                vm.setRemindCreatine(enabled)
+                            }
+                        })
+                    }
+                    if (settings.remindCreatine) {
+                        TextButton(onClick = {
+                            TimePickerDialog(context, { _, hour, minute ->
+                                vm.setCreatineReminderMinute(hour * 60 + minute)
+                            }, settings.creatineReminderMinute / 60, settings.creatineReminderMinute % 60, true).show()
+                        }) {
+                            Text("Hora aproximada: %02d:%02d".format(
+                                settings.creatineReminderMinute / 60, settings.creatineReminderMinute % 60,
+                            ))
+                        }
                     }
                     HorizontalDivider()
                     Text("Inteligencia artificial", style = MaterialTheme.typography.bodyLarge)

@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 
 private let documentTypes: [UTType] = [.pdf, .image, .plainText, .text, UTType(filenameExtension: "docx") ?? .data]
 
@@ -142,6 +143,43 @@ struct ProfileView: View {
                              detail: "Cuando un amigo registra comida o un entreno, o comenta y reacciona a lo tuyo. iOS decide cada cuánto revisar.")
             }
             Divider()
+            Text("Creatina").font(.subheadline.weight(.semibold))
+            Picker("Dosis diaria", selection: Binding(get: { settings.creatineDoseGrams }, set: { grams in
+                settings.setCreatineDose(grams)
+                app.backup.dirty = true
+            })) {
+                ForEach(Creatine.doses, id: \.self) { grams in
+                    Text(grams == 20 ? "20 g (fase de carga)" : "\(grams) g").tag(grams)
+                }
+            }
+            Text("Tiempo orientativo para llenar la figura: \(creatineTimeLabel(settings.creatineDoseGrams)). La dosis elegida se guarda en cada nueva toma.")
+                .font(.caption).foregroundStyle(.secondary)
+            Toggle(isOn: Binding(get: { settings.remindCreatine }, set: { enabled in
+                if enabled {
+                    Task {
+                        let granted = (try? await UNUserNotificationCenter.current()
+                            .requestAuthorization(options: [.alert, .sound])) ?? false
+                        settings.setRemindCreatine(granted)
+                        app.creatineReminder.refresh()
+                    }
+                } else {
+                    settings.setRemindCreatine(false)
+                    app.creatineReminder.refresh()
+                }
+            })) {
+                SettingLabel(title: "Recordarme la creatina",
+                             detail: "Aviso diario solo si no has registrado la toma antes de la hora elegida.")
+            }
+            if settings.remindCreatine {
+                DatePicker("Hora del recordatorio", selection: Binding(get: {
+                    Calendar.current.startOfDay(for: Date()).addingTimeInterval(Double(settings.creatineReminderMinute * 60))
+                }, set: { date in
+                    let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                    settings.setCreatineReminderMinute((parts.hour ?? 20) * 60 + (parts.minute ?? 0))
+                    app.creatineReminder.refresh()
+                }), displayedComponents: .hourAndMinute)
+            }
+            Divider()
             Text("Inteligencia artificial").font(.subheadline.weight(.semibold))
             Text(!settings.ownGeminiKey.isEmpty
                  ? "Usando tu propia clave de Gemini (\(settings.geminiModel.isEmpty ? AppModel.geminiModel : settings.geminiModel))."
@@ -207,6 +245,15 @@ struct ProfileView: View {
         return "\(version) (\(build))"
     }
 
+    private func creatineTimeLabel(_ grams: Int) -> String {
+        switch grams {
+        case 3: "4–6 semanas"
+        case 10: "2–3 semanas"
+        case 20: "5–7 días"
+        default: "3–4 semanas"
+        }
+    }
+
     private func saveName(_ name: String) {
         let clean = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
         guard !clean.isEmpty else { return }
@@ -252,6 +299,7 @@ struct ProfileView: View {
         Task {
             do {
                 backupMessage = try await app.backup.importFrom(url).message
+                app.creatineReminder.refresh()
                 app.sharedSettingsChanged()
             } catch {
                 backupMessage = friendlyMessage(error, "No se pudo completar el respaldo")

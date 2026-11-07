@@ -154,6 +154,9 @@ struct BackupFile: Codable {
     var weights: [BackupWeight] = []
     var weightGoal: WeightGoal? = nil
     var shareWeight: Bool = true
+    var creatineDays: [String] = []
+    var creatineDoseGrams: Int = 5
+    var creatineDoses: [String: Int] = [:]
 
     init(exportedAt: String) {
         self.exportedAt = exportedAt
@@ -176,6 +179,9 @@ struct BackupFile: Codable {
         weights = c.value(.weights, [])
         weightGoal = c.optional(.weightGoal)
         shareWeight = c.value(.shareWeight, true)
+        creatineDays = c.value(.creatineDays, [])
+        creatineDoseGrams = c.value(.creatineDoseGrams, 5)
+        creatineDoses = c.value(.creatineDoses, [:])
     }
 }
 

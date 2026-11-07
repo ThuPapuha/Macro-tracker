@@ -17,6 +17,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -55,6 +57,8 @@ class BackupManager(
     fun start() {
         scope.launch { repository.changedDays.collect { dirty = true } }
         scope.launch { progress.changed.collect { dirty = true } }
+        scope.launch { settings.settings.map { Triple(it.creatineDays, it.creatineDosesByDay, it.creatineDoseGrams) }
+            .distinctUntilChanged().collect { dirty = true } }
     }
 
     /** Called when the app goes to the background. */
@@ -105,6 +109,11 @@ class BackupManager(
         val prefs = settings.current()
         if (prefs.targets == null) backup.targets?.let { settings.setTargets(it) }
         if (prefs.weightGoal == null && backup.weightGoal != null) settings.setWeightGoal(backup.weightGoal, backup.shareWeight)
+        val hadCreatineDays = settings.current().creatineDays.isNotEmpty()
+        settings.importCreatineDays(backup.creatineDays, backup.creatineDoses)
+        if (!hadCreatineDays && backup.creatineDoseGrams in listOf(3, 5, 10, 20)) {
+            settings.setCreatineDose(backup.creatineDoseGrams)
+        }
 
         // Coming back as the same group member only makes sense on an install without groups.
         val session = backup.session
@@ -137,6 +146,10 @@ class BackupManager(
             weights = progress.backupWeights(),
             weightGoal = prefs.weightGoal,
             shareWeight = prefs.shareWeight,
+            creatineDays = prefs.creatineDays.map { it.toString() }.sorted(),
+            creatineDoseGrams = prefs.creatineDoseGrams,
+            creatineDoses = prefs.creatineDosesByDay.filterKeys { it in prefs.creatineDays }
+                .mapKeys { it.key.toString() },
         )
     }
 

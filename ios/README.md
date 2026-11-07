@@ -61,7 +61,7 @@ Para probarla en tu iPhone, conéctalo, elígelo arriba en Xcode y pulsa ▶︎.
 ### 5. TestFlight (probar con amigos)
 
 - **Probadores internos** (hasta 100 personas de tu equipo de App Store Connect): los agregas y les llega al instante, sin revisión.
-- **Probadores externos** (hasta 10 000, con un enlace público): la primera build pasa una revisión corta de Apple (1 a 2 días).
+- **Probadores externos** (hasta 10 000): crea primero un grupo interno y después uno externo; invita por correo solo a las personas elegidas. No actives un enlace público si quieres mantener el acceso cerrado. Apple debe aprobar la primera build para pruebas externas antes de que puedan instalarla.
 
 Cada build de TestFlight dura 90 días.
 

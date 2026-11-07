@@ -74,9 +74,13 @@ private struct ProgressData: Codable {
 final class ProgressStore {
     private static let file = "progress.json"
     private static let draftFile = "active-workout.json"
+    private static let creatineFile = "creatine-days.json"
+    private static let creatineDosesFile = "creatine-doses.json"
 
     private var data: ProgressData
     private(set) var activeWorkout: ActiveWorkout?
+    private(set) var creatineDays: Set<Day>
+    private(set) var creatineDosesByDay: [Day: Int]
 
     /// Called after anything changes (for syncing and backups).
     @ObservationIgnored var onChange: (() -> Void)?
@@ -84,6 +88,10 @@ final class ProgressStore {
     init() {
         data = FileStore.load(ProgressData.self, Self.file) ?? ProgressData()
         activeWorkout = FileStore.load(ActiveWorkout.self, Self.draftFile)
+        creatineDays = Set(FileStore.load([Day].self, Self.creatineFile) ?? [])
+        creatineDosesByDay = (FileStore.load([String: Int].self, Self.creatineDosesFile) ?? [:]).reduce(into: [:]) { result, entry in
+            if let day = Day(iso: entry.key), Creatine.doses.contains(entry.value) { result[day] = entry.value }
+        }
     }
 
     var sections: [RoutineSection] { data.sections.sorted { ($0.position, $0.name) < ($1.position, $1.name) } }
@@ -105,6 +113,20 @@ final class ProgressStore {
 
     private func persist() {
         FileStore.save(data, Self.file)
+        onChange?()
+    }
+
+    func setCreatineTaken(_ day: Day, taken: Bool, doseGrams: Int = 5) {
+        guard day <= .today else { return }
+        if taken {
+            creatineDays.insert(day)
+            creatineDosesByDay[day] = Creatine.doses.contains(doseGrams) ? doseGrams : 5
+        } else {
+            creatineDays.remove(day)
+            creatineDosesByDay.removeValue(forKey: day)
+        }
+        FileStore.save(creatineDays.sorted(), Self.creatineFile)
+        FileStore.save(backupCreatineDoses, Self.creatineDosesFile)
         onChange?()
     }
 
@@ -270,8 +292,24 @@ final class ProgressStore {
         weights.map { BackupWeight(date: $0.date.iso, kg: $0.kg, fatPercent: $0.fatPercent, musclePercent: $0.musclePercent, boneKg: $0.boneKg) }
     }
 
+    var backupCreatineDays: [String] { creatineDays.sorted().map(\.iso) }
+    var backupCreatineDoses: [String: Int] {
+        Dictionary(uniqueKeysWithValues: creatineDosesByDay.filter { creatineDays.contains($0.key) }.map { ($0.key.iso, $0.value) })
+    }
+
     /// Adds what is missing; returns how many workouts and weigh-ins were added.
     func importBackup(_ file: BackupFile) -> (workouts: Int, weights: Int) {
+        let importedCreatineDays = file.creatineDays.compactMap(Day.init(iso:)).filter { $0 <= .today }
+        if !importedCreatineDays.isEmpty {
+            creatineDays.formUnion(importedCreatineDays)
+            FileStore.save(creatineDays.sorted(), Self.creatineFile)
+            for day in importedCreatineDays where creatineDosesByDay[day] == nil {
+                if let dose = file.creatineDoses[day.iso], Creatine.doses.contains(dose) {
+                    creatineDosesByDay[day] = dose
+                }
+            }
+            FileStore.save(backupCreatineDoses, Self.creatineDosesFile)
+        }
         for section in file.sections where !data.sections.contains(where: { $0.id == section.id }) {
             data.sections.append(RoutineSection(id: section.id, name: section.name, position: section.position))
         }

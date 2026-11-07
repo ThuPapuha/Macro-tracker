@@ -15,6 +15,7 @@ final class AppModel {
     let ai: AIService
     let sync: SyncService
     let notifier: ActivityNotifier
+    let creatineReminder: CreatineReminder
     let backup: BackupManager
 
     var selectedTab: AppTab = .today
@@ -54,6 +55,7 @@ final class AppModel {
         }
         sync = SyncService(api: groupAPI, settings: settings, food: food, progress: progress)
         notifier = ActivityNotifier(api: groupAPI, settings: settings)
+        creatineReminder = CreatineReminder(settings: settings, progress: progress)
         backup = BackupManager(food: food, progress: progress, settings: settings, client: client, sessionStore: sessionStore)
 
         food.onChange = { [weak self] days in
@@ -69,6 +71,7 @@ final class AppModel {
     var serverConfigured: Bool { client != nil }
 
     func start() {
+        creatineReminder.refresh()
         sync.requestRecentFood()
         sync.requestProgress()
     }

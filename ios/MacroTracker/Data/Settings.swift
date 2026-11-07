@@ -33,6 +33,9 @@ final class Settings {
     private(set) var lastGroupId: String
     private(set) var notifyGroupActivity: Bool
     private(set) var notificationPermissionAsked: Bool
+    private(set) var creatineDoseGrams: Int
+    private(set) var remindCreatine: Bool
+    private(set) var creatineReminderMinute: Int
     private(set) var lastBackupAt: Date?
     private(set) var weightGoal: WeightGoal?
     private(set) var shareWeight: Bool
@@ -51,6 +54,11 @@ final class Settings {
         lastGroupId = d.string(forKey: "lastGroupId") ?? ""
         notifyGroupActivity = d.object(forKey: "notifyGroupActivity") as? Bool ?? true
         notificationPermissionAsked = d.bool(forKey: "notificationPermissionAsked")
+        let dose = d.integer(forKey: "creatineDoseGrams")
+        creatineDoseGrams = Creatine.doses.contains(dose) ? dose : 5
+        remindCreatine = d.bool(forKey: "remindCreatine")
+        let minute = d.object(forKey: "creatineReminderMinute") as? Int ?? 20 * 60
+        creatineReminderMinute = (0..<24 * 60).contains(minute) ? minute : 20 * 60
         lastBackupAt = d.object(forKey: "lastBackupAt") as? Date
         weightGoal = Self.decode(WeightGoal.self, d.data(forKey: "weightGoal"))
         shareWeight = d.object(forKey: "shareWeight") as? Bool ?? true
@@ -116,6 +124,23 @@ final class Settings {
     func setNotificationPermissionAsked() {
         notificationPermissionAsked = true
         defaults.set(true, forKey: "notificationPermissionAsked")
+    }
+
+    func setCreatineDose(_ grams: Int) {
+        guard Creatine.doses.contains(grams) else { return }
+        creatineDoseGrams = grams
+        defaults.set(grams, forKey: "creatineDoseGrams")
+    }
+
+    func setRemindCreatine(_ enabled: Bool) {
+        remindCreatine = enabled
+        defaults.set(enabled, forKey: "remindCreatine")
+    }
+
+    func setCreatineReminderMinute(_ minute: Int) {
+        guard (0..<24 * 60).contains(minute) else { return }
+        creatineReminderMinute = minute
+        defaults.set(minute, forKey: "creatineReminderMinute")
     }
 
     func setLastBackup(_ date: Date) {

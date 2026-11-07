@@ -1,12 +1,12 @@
 # Política de privacidad de Macro Tracker
 
-*Última actualización: 29 de octubre de 2026*
+*Última actualización: 6 de noviembre de 2026*
 
 Macro Tracker es una app gratuita y de código abierto ([código fuente](https://github.com/ThuPapuha/Macro-tracker)) para registrar comidas, entrenamientos y peso, y compartir el progreso con grupos de amigos. Esta política vale para las apps de Android y de iPhone.
 
 ## Lo que se queda en tu teléfono
 
-Tus comidas, rutinas, entrenamientos, registros de peso y composición corporal, objetivos y ajustes se guardan **solo en tu teléfono**. También quedan en las copias de respaldo que tú exportas o que la app guarda en el almacenamiento de tu teléfono. No tenemos acceso a ellos.
+Tus comidas, rutinas, entrenamientos, registros de peso, composición corporal y creatina, objetivos y ajustes se guardan **solo en tu teléfono**. También quedan en las copias de respaldo que tú exportas o que la app guarda en el almacenamiento de tu teléfono. No tenemos acceso a ellos.
 
 ## Lo que se manda al servidor
 

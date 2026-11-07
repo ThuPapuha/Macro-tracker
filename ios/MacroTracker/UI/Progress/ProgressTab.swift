@@ -82,6 +82,11 @@ struct ProgressTab: View {
                 WeekStats(workouts: workouts)
                 WeightCard(weights: weights, goal: app.settings.weightGoal,
                            onLog: { sheet = .weight }, onGoal: { sheet = .goal }, onHistory: { sheet = .history })
+                CreatineCard(takenDays: progress.creatineDays, dosesByDay: progress.creatineDosesByDay,
+                             doseGrams: app.settings.creatineDoseGrams) { day, taken in
+                    progress.setCreatineTaken(day, taken: taken, doseGrams: app.settings.creatineDoseGrams)
+                    app.creatineReminder.refresh()
+                }
 
                 SectionHeader(title: "Entrenar", action: "+ Sección") { sheet = .section(nil) }
                 if routines.isEmpty && sections.isEmpty {

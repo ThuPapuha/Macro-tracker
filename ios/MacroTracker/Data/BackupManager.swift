@@ -70,6 +70,9 @@ final class BackupManager {
         file.weights = progress.backupWeights
         file.weightGoal = settings.weightGoal
         file.shareWeight = settings.shareWeight
+        file.creatineDays = progress.backupCreatineDays
+        file.creatineDoseGrams = settings.creatineDoseGrams
+        file.creatineDoses = progress.backupCreatineDoses
         return file
     }
 
@@ -93,7 +96,11 @@ final class BackupManager {
         let backup = try Backups.decode(try Data(contentsOf: url))
 
         let added = food.importEntries(backup.entries)
+        let hadCreatineDays = !progress.creatineDays.isEmpty
         let (workouts, weights) = progress.importBackup(backup)
+        if !hadCreatineDays && Creatine.doses.contains(backup.creatineDoseGrams) {
+            settings.setCreatineDose(backup.creatineDoseGrams)
+        }
         if settings.targets == nil, let targets = backup.targets { settings.setTargets(targets) }
         if settings.weightGoal == nil, let goal = backup.weightGoal { settings.setWeightGoal(goal, share: backup.shareWeight) }
 

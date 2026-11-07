@@ -79,6 +79,9 @@ data class BackupFile(
     val weights: List<BackupWeight> = emptyList(),
     val weightGoal: WeightGoal? = null,
     val shareWeight: Boolean = true,
+    val creatineDays: List<String> = emptyList(),
+    val creatineDoseGrams: Int = 5,
+    val creatineDoses: Map<String, Int> = emptyMap(),
 ) {
     companion object {
         const val APP_ID = "macro-tracker"

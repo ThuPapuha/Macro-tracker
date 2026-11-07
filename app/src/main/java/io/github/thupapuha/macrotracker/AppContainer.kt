@@ -11,6 +11,7 @@ import io.github.thupapuha.macrotracker.core.supabase.SupabaseClient
 import io.github.thupapuha.macrotracker.core.supabase.SupabaseConfig
 import io.github.thupapuha.macrotracker.data.AppUpdater
 import io.github.thupapuha.macrotracker.data.BackupManager
+import io.github.thupapuha.macrotracker.data.CreatineReminder
 import io.github.thupapuha.macrotracker.data.FoodDatabase
 import io.github.thupapuha.macrotracker.data.FoodRepository
 import io.github.thupapuha.macrotracker.data.GroupActivityNotifier
@@ -70,6 +71,7 @@ class AppContainer(context: Context) {
     val updater = AppUpdater(context, http, appScope, beforeInstall = { backup.backupNow() })
 
     val groupNotifier = GroupActivityNotifier(context, groupApi, settings, appScope)
+    val creatineReminder = CreatineReminder(context, settings, appScope)
 
     /** A key typed in Perfil wins; otherwise requests go through the Supabase proxy. */
     private suspend fun geminiTransport(): GeminiTransport {

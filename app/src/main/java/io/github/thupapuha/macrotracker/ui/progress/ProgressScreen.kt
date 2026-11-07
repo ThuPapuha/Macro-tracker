@@ -118,6 +118,10 @@ class ProgressViewModel(
         viewModelScope.launch { settings.setWeightGoal(goal, share) }
     }
 
+    fun setCreatineTaken(day: LocalDate, taken: Boolean) {
+        viewModelScope.launch { settings.setCreatineTaken(day, taken, settings.current().creatineDoseGrams) }
+    }
+
     fun saveSection(name: String, id: String?) {
         viewModelScope.launch { repository.saveSection(name, id) }
     }
@@ -229,6 +233,10 @@ fun ProgressScreen(
                     onGoal = { dialog = "goal" },
                     onHistory = { dialog = "history" },
                 )
+            }
+            item(key = "creatine") {
+                CreatineCard(prefs?.creatineDays.orEmpty(), prefs?.creatineDosesByDay.orEmpty(),
+                    prefs?.creatineDoseGrams ?: 5, vm::setCreatineTaken)
             }
 
             item(key = "routines-header") {
