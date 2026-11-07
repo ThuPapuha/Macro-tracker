@@ -59,7 +59,7 @@ jobs:
         run: |
           printf 'GEMINI_API_KEY=%s\nGEMINI_MODEL=%s\nAI_DAILY_LIMIT=%s\n' \
             "$GEMINI_API_KEY" "$GEMINI_MODEL" "$AI_DAILY_LIMIT" > "$RUNNER_TEMP/functions.env"
-          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$RUNNER_TEMP/functions.env"
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$RUNNER_TEMP/functions.env" --yes
           rm -f "$RUNNER_TEMP/functions.env"
 
       - name: Deploy Edge Function
